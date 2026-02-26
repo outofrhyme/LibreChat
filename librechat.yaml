@@ -1,0 +1,37 @@
+version: 1.1.0
+
+registration:
+  allowedRoles: ["user", "kids", "admin"]
+  defaultRole: "user"
+
+# 1. Global Timestamp Fix
+endpoints:
+  all:
+    append_current_datetime: true
+  agents:
+    disableBuilder: false # Forces the builder to stay "ON" for you
+
+# 2. The Interface Split
+modelSpecs:
+  enforce: true       # This hides the raw models from the kids
+  prioritize: true    # This makes the kids' agents the default
+  list:
+    - name: "phoebe-kirby"
+      label: "Kirby"
+      endpoint: "agents"
+      preset:
+        agent_id: "agent_t70MR48Ov1nEPfyRCFx5E"
+    - name: "hannah-daisy"
+      label: "Daisy"
+      endpoint: "agents"
+      preset:
+        agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
+
+  # This is the "Adult Pass" - it ensures YOU and DAN can still see 
+  # the raw models and the Agents tab to create new things.
+  addedEndpoints: ["openai", "agents"]
+
+interface:
+  endpointsMenu: false  # Keeps the UI clean (hides the provider list)
+  modelSelect: true     # Essential for switching models
+  parameters: true      # Keeps your sliders visible
