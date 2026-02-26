@@ -1,20 +1,20 @@
-version: 1.1.0
+version: 1.1.1
 
-registration:
-  allowedRoles: ["user", "kids", "admin"]
-  defaultRole: "user"
+# 1. This defines what "Kids" can actually see
+roles:
+  kids:
+    permissions:
+      modelSelect: false    # This locks them! They can't switch away from Kirby/Daisy
+      endpointsMenu: false  # They won't see the "OpenAI" or "Google" list
+      parameters: false     # No technical sliders
+      agents:
+        create: false       # They can't build new agents
+        use: true
 
-# 1. Global Timestamp Fix
-endpoints:
-  all:
-    append_current_datetime: true
-  agents:
-    disableBuilder: false # Forces the builder to stay "ON" for you
-
-# 2. The Interface Split
+# 2. This creates the "Buttons" (Global)
 modelSpecs:
-  enforce: true       # This hides the raw models from the kids
-  prioritize: true    # This makes the kids' agents the default
+  enforce: true
+  prioritize: true
   list:
     - name: "phoebe-kirby"
       label: "Kirby"
@@ -27,11 +27,11 @@ modelSpecs:
       preset:
         agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
 
-  # This is the "Adult Pass" - it ensures YOU and DAN can still see 
-  # the raw models and the Agents tab to create new things.
-  addedEndpoints: ["openai", "agents"]
+  # This allows YOU and DAN to still see the raw models 
+  # even though we "enforced" the specs above.
+  addedEndpoints: ["openai", "google", "agents"]
 
-interface:
-  endpointsMenu: false  # Keeps the UI clean (hides the provider list)
-  modelSelect: true     # Essential for switching models
-  parameters: true      # Keeps your sliders visible
+# 3. Global Time (Your Original Goal)
+endpoints:
+  all:
+    append_current_datetime: true
