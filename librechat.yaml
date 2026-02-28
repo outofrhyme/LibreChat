@@ -1,17 +1,26 @@
-version: 1.1.1
+version: 1.1.2
 
-# 1. This defines what "Kids" can actually see
+# 1. Define standard roles
+# This locks down the 'USER' (your kids) while giving 'ADMIN' (you) full power.
 roles:
-  kids:
+  USER:
     permissions:
-      modelSelect: false    # This locks them! They can't switch away from Kirby/Daisy
-      endpointsMenu: false  # They won't see the "OpenAI" or "Google" list
-      parameters: false     # No technical sliders
+      modelSelect: false    # Prevents them from switching to raw models
+      endpointsMenu: false  # Hides the list of providers (OpenAI, Google, etc.)
+      parameters: false     # Hides the technical sidebars (Temperature, etc.)
       agents:
-        create: false       # They can't build new agents
+        create: false       # They cannot build new agents
+        use: true           # They can only use what is shared/mapped
+  ADMIN:
+    permissions:
+      modelSelect: true
+      endpointsMenu: true
+      parameters: true
+      agents:
+        create: true
         use: true
 
-# 2. This creates the "Buttons" (Global)
+# 2. Model Specs (The "Buttons")
 modelSpecs:
   enforce: true
   prioritize: true
@@ -27,20 +36,25 @@ modelSpecs:
       preset:
         agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
 
-  # This allows YOU and DAN to still see the raw models 
-  # even though we "enforced" the specs above.
-  addedEndpoints: ["openai", "google", "agents"]
-
-# 3. Global Time (Your Original Goal)
+# 3. Endpoint visibility
+# By adding these here, they become available to ADMINS even with 'enforce: true'
+# Because the USER role has 'endpointsMenu: false', they won't see these anyway.
 endpoints:
   all:
     append_current_datetime: true
+  # This ensures the raw endpoints are still registered in the system
+  openai: 
+    enabled: true
+  google:
+    enabled: true
+  agents:
+    enabled: true
 
-# 4. Enable balances (primarily for children)
+# 4. Enable balances
 balance:
   enabled: true
-  startBalance: 50000  # Initial tokens for NEW users (e.g., 50,000 = $0.05 worth of GPT-4o)
+  startBalance: 50000  
   autoRefillEnabled: true
-  refillAmount: 10000  # Amount to add per interval
+  refillAmount: 10000  
   refillIntervalValue: 1
-  refillIntervalUnit: 'days' # Resets every week
+  refillIntervalUnit: 'days'
