@@ -1,16 +1,14 @@
 version: 1.1.2
 
-# 1. Define standard roles
-# This locks down the 'USER' (your kids) while giving 'ADMIN' (you) full power.
 roles:
   USER:
     permissions:
-      modelSelect: false    # Prevents them from switching to raw models
-      endpointsMenu: false  # Hides the list of providers (OpenAI, Google, etc.)
-      parameters: false     # Hides the technical sidebars (Temperature, etc.)
+      modelSelect: false
+      endpointsMenu: false
+      parameters: false
       agents:
-        create: false       # They cannot build new agents
-        use: true           # They can only use what is shared/mapped
+        create: false
+        use: true
   ADMIN:
     permissions:
       modelSelect: true
@@ -20,7 +18,6 @@ roles:
         create: true
         use: true
 
-# 2. Model Specs (The "Buttons")
 modelSpecs:
   enforce: true
   prioritize: true
@@ -36,13 +33,9 @@ modelSpecs:
       preset:
         agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
 
-# 3. Endpoint visibility
-# By adding these here, they become available to ADMINS even with 'enforce: true'
-# Because the USER role has 'endpointsMenu: false', they won't see these anyway.
 endpoints:
   all:
     append_current_datetime: true
-  # This ensures the raw endpoints are still registered in the system
   openai: 
     enabled: true
   google:
@@ -50,7 +43,6 @@ endpoints:
   agents:
     enabled: true
 
-# 4. Enable balances
 balance:
   enabled: true
   startBalance: 50000  
