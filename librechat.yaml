@@ -3,9 +3,6 @@ version: 1.1.3
 modelSpecs:
   enforce: true
   prioritize: true
-  # Optional but often helpful if you want endpoints selectable in addition to modelSpecs
-  # addedEndpoints:
-  #   - agents
   list:
     - name: "phoebe-kirby"
       label: "Kirby"
@@ -20,11 +17,9 @@ modelSpecs:
         agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
 
 interface:
-  # These are GLOBAL. If you set these false, it’s false for admins too.
   endpointsMenu: false
-  modelSelect: false
+  modelSelect: true
   parameters: false
-  # You said you already handled agent creation via UI; keeping here as global “belt”
   agents:
     use: true
 
