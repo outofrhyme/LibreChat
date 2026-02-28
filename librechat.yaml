@@ -35,3 +35,12 @@ modelSpecs:
 endpoints:
   all:
     append_current_datetime: true
+
+# 4. Enable balances (primarily for children)
+balance:
+  enabled: true
+  startBalance: 50000  # Initial tokens for NEW users (e.g., 50,000 = $0.05 worth of GPT-4o)
+  autoRefillEnabled: true
+  refillAmount: 10000  # Amount to add per interval
+  refillIntervalValue: 1
+  refillIntervalUnit: 'days' # Resets every week
