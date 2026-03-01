@@ -31,8 +31,8 @@ endpoints:
 
 balance:
   enabled: true
-  startBalance: 60000
+  startBalance: 100000
   autoRefillEnabled: true
-  refillAmount: 60000
-  refillIntervalValue: 6
+  refillAmount: 100000
+  refillIntervalValue: 4
   refillIntervalUnit: "hours"
