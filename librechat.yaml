@@ -26,6 +26,8 @@ interface:
 endpoints:
   openAI:
     enabled: true
+    models:
+      fetch: true
   agents:
     enabled: true
 
