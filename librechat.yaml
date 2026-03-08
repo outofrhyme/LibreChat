@@ -8,13 +8,13 @@ modelSpecs:
       label: "Kirby"
       preset:
         endpoint: "agents"
-        agent_id: "agent_t70MR48Ov1nEPfyRCFx5E"
+        agent_id: "agent_6MJha4qXgWXHfkLGvBCaq"
 
     - name: "hannah-daisy"
       label: "Daisy"
       preset:
         endpoint: "agents"
-        agent_id: "agent_yv1ywBKIFYXqhZxPZnH1R"
+        agent_id: "agent_qlPsftHJvq7gbNWm8of5X"
 
 interface:
   endpointsMenu: false
