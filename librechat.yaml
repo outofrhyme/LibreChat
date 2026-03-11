@@ -2,7 +2,7 @@ version: 1.3.6
 
 # Storage & Performance Settings
 cache: true
-fileStrategy: "firebase"
+fileStrategy: "local"
 
 modelSpecs:
   enforce: false
