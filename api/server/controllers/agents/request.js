@@ -35,12 +35,19 @@ function createCloseHandler(abortController) {
 const padTimestampPart = (value) => value.toString().padStart(2, '0');
 
 function formatTimestamp(date) {
-  return [
-    date.getFullYear(),
-    padTimestampPart(date.getMonth() + 1),
-    padTimestampPart(date.getDate()),
-  ].join('-') + ` ${[padTimestampPart(date.getHours()), padTimestampPart(date.getMinutes()), padTimestampPart(date.getSeconds())].join(':')}`;
+  return (
+    [
+      date.getFullYear(),
+      padTimestampPart(date.getMonth() + 1),
+      padTimestampPart(date.getDate()),
+    ].join('-') +
+    ` ${[padTimestampPart(date.getHours()), padTimestampPart(date.getMinutes()), padTimestampPart(date.getSeconds())].join(':')}`
+  );
 }
+
+const LEADING_MSG_TIME_PREFIX_REGEX = /^\[msg_time:\s[^\]]+\]\s/;
+
+const stripLeadingMsgTimePrefix = (text) => text.replace(LEADING_MSG_TIME_PREFIX_REGEX, '');
 
 function buildMessageTimestamp(clientTimezone) {
   if (clientTimezone) {
@@ -59,10 +66,13 @@ function buildMessageTimestamp(clientTimezone) {
       const lookup = new Map(parts.map((part) => [part.type, part.value]));
       const stamp = `${lookup.get('year')}-${lookup.get('month')}-${lookup.get('day')} ${lookup.get('hour')}:${lookup.get('minute')}:${lookup.get('second')}`;
       return `[msg_time: ${stamp} ${clientTimezone}]`;
-    } catch (error) {
-      logger.debug('[AgentController] Invalid client timezone provided, using server local timezone', {
-        clientTimezone,
-      });
+    } catch (_error) {
+      logger.debug(
+        '[AgentController] Invalid client timezone provided, using server local timezone',
+        {
+          clientTimezone,
+        },
+      );
     }
   }
 
@@ -91,7 +101,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   const userId = req.user.id;
   const timestampPrefix = buildMessageTimestamp(clientTimezone);
   const safeOriginalText = typeof originalText === 'string' ? originalText : '';
-  const text = safeOriginalText ? `${timestampPrefix} ${safeOriginalText}` : timestampPrefix;
+  const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
+  const text = sanitizedOriginalText
+    ? `${timestampPrefix} ${sanitizedOriginalText}`
+    : timestampPrefix;
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
   if (!allowed) {
@@ -499,7 +512,10 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
   const userId = req.user.id;
   const timestampPrefix = buildMessageTimestamp(clientTimezone);
   const safeOriginalText = typeof originalText === 'string' ? originalText : '';
-  const text = safeOriginalText ? `${timestampPrefix} ${safeOriginalText}` : timestampPrefix;
+  const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
+  const text = sanitizedOriginalText
+    ? `${timestampPrefix} ${sanitizedOriginalText}`
+    : timestampPrefix;
 
   // Create handler to avoid capturing the entire parent scope
   let getReqData = (data = {}) => {
