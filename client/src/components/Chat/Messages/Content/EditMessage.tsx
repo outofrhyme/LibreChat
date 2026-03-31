@@ -7,6 +7,7 @@ import type { TEditProps } from '~/common';
 import { useMessagesOperations, useMessagesConversation } from '~/Providers';
 import { useGetAddedConvo } from '~/hooks/Chat';
 import { cn, removeFocusRings } from '~/utils';
+import { stripMsgTimePrefixForDisplay } from '~/utils/messageText';
 import { useLocalize } from '~/hooks';
 import Container from './Container';
 import store from '~/store';
@@ -36,9 +37,13 @@ const EditMessage = ({
 
   const getAddedConvo = useGetAddedConvo();
 
+  const initialText = message.isCreatedByUser
+    ? stripMsgTimePrefixForDisplay(text ?? '', true)
+    : (text ?? '');
+
   const { register, handleSubmit, setValue } = useForm({
     defaultValues: {
-      text: text ?? '',
+      text: initialText,
     },
   });
 
