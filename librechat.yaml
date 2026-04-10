@@ -7,6 +7,10 @@ fileStrategy: "local"
 modelSpecs:
   enforce: false
   prioritize: true
+  addedEndpoints:
+    - openAI
+    - anthropic
+    - google
   list:
     - name: "phoebe-kirby"
       label: "Kirby"
