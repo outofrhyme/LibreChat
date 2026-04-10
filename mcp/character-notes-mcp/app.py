@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -200,4 +201,15 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8080"))
     path = os.getenv("MCP_HTTP_PATH", "/mcp")
-    mcp.run(transport=transport, host=host, port=port, path=path)
+
+    run_parameters = inspect.signature(mcp.run).parameters
+    run_kwargs: dict[str, object] = {"transport": transport}
+
+    if "host" in run_parameters:
+        run_kwargs["host"] = host
+    if "port" in run_parameters:
+        run_kwargs["port"] = port
+    if "path" in run_parameters:
+        run_kwargs["path"] = path
+
+    mcp.run(**run_kwargs)

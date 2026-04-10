@@ -21,7 +21,7 @@ A minimal MCP server for shared note retrieval across cloned LibreChat agents.
 | `MCP_TRANSPORT` | ❌ | `streamable-http` | MCP transport mode |
 | `HOST` | ❌ | `0.0.0.0` | Bind host |
 | `PORT` | ❌ | `8080` | Bind port |
-| `MCP_HTTP_PATH` | ❌ | `/mcp` | MCP HTTP path |
+| `MCP_HTTP_PATH` | ❌ | `/mcp` | MCP HTTP path (used when supported by installed SDK) |
 | `MAX_QUERY_LENGTH` | ❌ | `250` | Max allowed query length |
 | `MAX_LIMIT` | ❌ | `20` | Max search result count |
 | `MAX_SNIPPET_LENGTH` | ❌ | `400` | Snippet length in chars |
@@ -39,7 +39,7 @@ export MCP_SHARED_TOKEN="replace-me"
 python app.py
 ```
 
-Server defaults to `http://localhost:8080/mcp`.
+Server defaults to `http://localhost:8080/mcp` when the installed MCP SDK accepts host/port/path run arguments.
 
 ## Railway Deploy
 
