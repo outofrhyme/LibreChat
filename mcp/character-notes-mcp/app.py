@@ -142,6 +142,23 @@ def _build_metadata(path: Path) -> tuple[str, int]:
     return modified_at, stat.st_size
 
 
+def _apply_runtime_settings(host: str, port: int, path: str) -> None:
+    settings = getattr(mcp, "settings", None)
+    if settings is None:
+        return
+
+    if hasattr(settings, "host"):
+        settings.host = host
+    if hasattr(settings, "port"):
+        settings.port = port
+    if hasattr(settings, "path"):
+        settings.path = path
+    if hasattr(settings, "mount_path"):
+        settings.mount_path = path
+    if hasattr(settings, "streamable_http_path"):
+        settings.streamable_http_path = path
+
+
 @mcp.tool()
 def search_notes(query: str, limit: int = 8, token: str | None = None) -> list[SearchResult]:
     """Search markdown/text notes and return concise ranked matches."""
@@ -201,6 +218,8 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8080"))
     path = os.getenv("MCP_HTTP_PATH", "/mcp")
+
+    _apply_runtime_settings(host=host, port=port, path=path)
 
     run_parameters = inspect.signature(mcp.run).parameters
     run_kwargs: dict[str, object] = {"transport": transport}
