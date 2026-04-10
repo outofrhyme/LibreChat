@@ -1,16 +1,11 @@
 version: 1.3.6
 
-# Storage & Performance Settings
 cache: true
 fileStrategy: "local"
 
 modelSpecs:
   enforce: false
   prioritize: true
-  addedEndpoints:
-    - openAI
-    - anthropic
-    - google
   list:
     - name: "phoebe-kirby"
       label: "Kirby"
