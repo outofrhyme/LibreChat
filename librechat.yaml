@@ -32,6 +32,10 @@ endpoints:
     enabled: true
     models:
       fetch: true
+  anthropic:
+    enabled: true
+  google:
+    enabled: true
   agents:
     enabled: true
 
