@@ -38,6 +38,10 @@ endpoints:
     enabled: true
   agents:
     enabled: true
+    allowedProviders:
+      - openAI
+      - anthropic
+      - google
 
 balance:
   enabled: true
