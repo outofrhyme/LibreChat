@@ -59,7 +59,8 @@ mcp = FastMCP(
         allowed_hosts=[
             "localhost:*",
             "127.0.0.1:*",
-            "*.up.railway.app",
+            "*.up.railway.app:*",
+            "rememberwhen-production.up.railway.app:*",
         ],
     ),
 )
