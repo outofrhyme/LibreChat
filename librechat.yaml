@@ -42,6 +42,15 @@ endpoints:
       - anthropic
       - google
 
+mcpServers:
+  remember-when:
+    type: streamable-http
+    url: "https://rememberwhen-production.up.railway.app/mcp"
+    headers:
+      Authorization: "Bearer ${REMEMBER_WHEN_MCP_TOKEN}"
+      X-LibreChat-User-Id: "{{LIBRECHAT_USER_ID}}"
+      X-LibreChat-Agent-Name: "{{LIBRECHAT_AGENT_NAME}}"
+
 balance:
   enabled: true
   startBalance: 100000
