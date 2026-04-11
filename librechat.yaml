@@ -43,8 +43,9 @@ endpoints:
       - google
 
 mcpServers:
-  remember-when:
+  remember-when-yaml:
     type: streamable-http
+    chatMenu: false
     url: "https://rememberwhen-production.up.railway.app/mcp"
     headers:
       Authorization: "Bearer ${REMEMBER_WHEN_MCP_TOKEN}"
