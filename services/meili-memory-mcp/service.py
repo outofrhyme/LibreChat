@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 from meilisearch import Client
 
-from .core import (
+from core import (
     parse_search_input,
     normalize_agent_display_name,
     collect_sender_variants_for_agent,
