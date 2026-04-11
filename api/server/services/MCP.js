@@ -505,6 +505,7 @@ function createToolInstance({
         serverName,
         toolName,
         provider,
+        agentName: config?.metadata?.name,
         toolArguments,
         options: {
           signal: derivedSignal,
