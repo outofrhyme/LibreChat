@@ -1082,6 +1082,46 @@ describe('processMCPEnv', () => {
     });
   });
 
+  it('should process LIBRECHAT_AGENT_NAME placeholders in headers and URL', () => {
+    const options: MCPOptions = {
+      type: 'streamable-http',
+      url: 'https://mcp.example.com/{{LIBRECHAT_AGENT_NAME}}',
+      headers: {
+        'X-LibreChat-Agent-Name': '{{LIBRECHAT_AGENT_NAME}}',
+      },
+    };
+
+    const result = processMCPEnv({ options, agentName: 'Nolan (5.4)' });
+
+    expect(result).toEqual({
+      type: 'streamable-http',
+      url: 'https://mcp.example.com/Nolan%20%285.4%29',
+      headers: {
+        'X-LibreChat-Agent-Name': 'Nolan (5.4)',
+      },
+    });
+  });
+
+  it('should resolve LIBRECHAT_AGENT_NAME to empty string when no agent is active', () => {
+    const options: MCPOptions = {
+      type: 'sse',
+      url: 'https://mcp.example.com/{{LIBRECHAT_AGENT_NAME}}',
+      headers: {
+        'X-LibreChat-Agent-Name': '{{LIBRECHAT_AGENT_NAME}}',
+      },
+    };
+
+    const result = processMCPEnv({ options });
+
+    expect(result).toEqual({
+      type: 'sse',
+      url: 'https://mcp.example.com/',
+      headers: {
+        'X-LibreChat-Agent-Name': '',
+      },
+    });
+  });
+
   it('should process custom user variables', () => {
     const customUserVars = {
       CUSTOM_TOKEN: 'user-specific-token',
