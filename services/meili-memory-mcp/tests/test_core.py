@@ -8,6 +8,7 @@ from core import (
     collect_sender_variants_for_agent,
     build_search_filter,
     parse_search_input,
+    parse_caller_context,
 )
 
 
@@ -48,3 +49,11 @@ def test_parse_search_input_bounds_limit_and_requires_query():
     assert parsed.query == "hi"
     assert parsed.limit >= 1
     assert parsed.conversation_id == "conv"
+
+
+def test_parse_caller_context_accepts_user_id_alias():
+    caller = parse_caller_context(
+        {"x-user-id": "user-abc", "x-librechat-agent-name": "Nolan (5.4)"},
+    )
+    assert caller.user_id == "user-abc"
+    assert caller.agent_display_name == "Nolan (5.4)"

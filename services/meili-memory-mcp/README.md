@@ -26,6 +26,8 @@ Optional:
 
 - `X-LibreChat-User-Id`: trusted current user ID (required).
 - `X-LibreChat-Agent-Name`: trusted current agent display name (optional).
+- User ID aliases also accepted for resilience: `X-User-Id`, `User-Id`.
+- Service prints a redacted debug header map (`authorization` masked) to aid deployment debugging.
 
 ## Tool
 

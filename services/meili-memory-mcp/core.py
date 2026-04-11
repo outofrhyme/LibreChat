@@ -11,6 +11,13 @@ DEFAULT_LIMIT = int(os.getenv("DEFAULT_LIMIT", "8"))
 
 USER_ID_HEADER = os.getenv("LIBRECHAT_USER_ID_HEADER", "x-librechat-user-id").lower()
 AGENT_NAME_HEADER = os.getenv("LIBRECHAT_AGENT_NAME_HEADER", "x-librechat-agent-name").lower()
+USER_ID_HEADER_ALIASES = (
+    USER_ID_HEADER,
+    "x-librechat-user-id",
+    "x-librechat-user-id".replace("-id", "-ID").lower(),
+    "x-user-id",
+    "user-id",
+)
 
 
 @dataclass(frozen=True)
@@ -59,8 +66,23 @@ def get_required_header(headers: Mapping[str, str], header_name: str) -> str:
     return value
 
 
+def get_required_header_from_aliases(headers: Mapping[str, str], header_names: tuple[str, ...]) -> str:
+    for header_name in header_names:
+        value = headers.get(header_name.lower(), "").strip()
+        if value:
+            return value
+    joined = ", ".join(header_names)
+    raise ValueError(f"Missing required trusted header (aliases checked): {joined}")
+
+
 def parse_caller_context(headers: Mapping[str, str]) -> CallerContext:
-    user_id = get_required_header(headers, USER_ID_HEADER)
+    safe_headers = {
+        k: ("<redacted>" if k == "authorization" else v)
+        for k, v in headers.items()
+    }
+    print("DEBUG headers:", safe_headers, flush=True)
+
+    user_id = get_required_header_from_aliases(headers, USER_ID_HEADER_ALIASES)
     raw_agent_name = headers.get(AGENT_NAME_HEADER, "").strip()
     return CallerContext(user_id=user_id, agent_display_name=raw_agent_name or None)
 
