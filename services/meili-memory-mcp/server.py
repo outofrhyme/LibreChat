@@ -57,10 +57,9 @@ mcp = FastMCP(
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[
-            "localhost:*",
-            "127.0.0.1:*",
-            "*.up.railway.app:*",
-            "rememberwhen-production.up.railway.app:*",
+            "localhost",
+            "127.0.0.1",
+            "rememberwhen-production.up.railway.app",
         ],
     ),
 )
