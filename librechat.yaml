@@ -43,7 +43,9 @@ endpoints:
       - google
 
 mcpServers:
-  remember-when-yaml:
+  remember-when:
+    title: "Remember When"
+    description: "Search prior conversations scoped to the current user and agent."
     type: streamable-http
     chatMenu: false
     url: "https://rememberwhen-production.up.railway.app/mcp"
