@@ -500,6 +500,7 @@ function createToolInstance({
 
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
+      const mcpUser = config?.configurable?.user ?? (userId ? { id: userId } : undefined);
 
       const result = await mcpManager.callTool({
         serverName,
@@ -510,7 +511,7 @@ function createToolInstance({
         options: {
           signal: derivedSignal,
         },
-        user: config?.configurable?.user,
+        user: mcpUser,
         requestBody: config?.configurable?.requestBody,
         customUserVars,
         flowManager,

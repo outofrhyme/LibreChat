@@ -33,6 +33,7 @@ Optional:
 
 Inputs:
 - `query` (string, required)
+- `Query` (string, optional alias for clients that capitalize tool args)
 - `limit` (integer, optional)
 - `conversationId` (string, optional)
 

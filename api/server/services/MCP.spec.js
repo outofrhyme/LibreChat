@@ -806,6 +806,62 @@ describe('User parameter passing tests', () => {
       // Verify reinitMCPServer was NOT called since tool was in cache
       expect(mockReinitMCPServer).not.toHaveBeenCalled();
     });
+
+    it('should pass fallback user.id and agentName to mcpManager.callTool for agent tool calls', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      const mockGetMCPManager = require('~/config').getMCPManager;
+      const mockGetFlowStateManager = require('~/config').getFlowStateManager;
+      const mockGetLogStores = require('~/cache').getLogStores;
+
+      mockGetMCPManager.mockReturnValue({
+        callTool: mockCallTool,
+      });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+
+      const availableTools = {
+        [`test-tool${D}test-server`]: {
+          function: {
+            description: 'Cached tool',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      };
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools,
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        {},
+        {
+          configurable: {
+            user_id: 'agent-user-id-only',
+            requestBody: { conversationId: 'conv-1' },
+          },
+          metadata: {
+            provider: 'openai',
+            name: 'Nolan (5.4)',
+            thread_id: 'thread-1',
+            run_id: 'run-1',
+          },
+        },
+      );
+
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: { id: 'agent-user-id-only' },
+          agentName: 'Nolan (5.4)',
+        }),
+      );
+    });
   });
 
   describe('reinitMCPServer (via reconnectServer)', () => {
