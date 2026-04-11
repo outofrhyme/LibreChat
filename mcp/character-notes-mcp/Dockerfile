@@ -2,16 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY mcp/character-notes-mcp/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ./
+COPY mcp/character-notes-mcp/app.py ./
+COPY Nolan ./Nolan
 
 ENV HOST=0.0.0.0
-ENV PORT=8080
-ENV MCP_TRANSPORT=streamable-http
-ENV MCP_HTTP_PATH=/mcp
-
-EXPOSE 8080
 
 CMD ["python", "app.py"]
