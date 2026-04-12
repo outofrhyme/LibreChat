@@ -501,12 +501,56 @@ function createToolInstance({
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
       const mcpUser = config?.configurable?.user ?? (userId ? { id: userId } : undefined);
+      const metadata = config?.metadata ?? {};
+      const configurable = config?.configurable ?? {};
+      const agentFromConfigurable =
+        configurable?.agent != null && typeof configurable.agent === 'object'
+          ? configurable.agent.name
+          : undefined;
+      const candidateAgentNames = [
+        metadata?.name,
+        agentFromConfigurable,
+        metadata?.agent_name,
+        metadata?.agentName,
+        metadata?.sender,
+      ];
+      const agentName = candidateAgentNames.find(
+        (value) => typeof value === 'string' && value.trim().length > 0,
+      );
+      const formatField = (value) => {
+        if (value == null) {
+          return '<unset>';
+        }
+        if (typeof value !== 'string') {
+          return `<${typeof value}>`;
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return '<empty>';
+        }
+        return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
+      };
+      if (!agentName) {
+        logger.debug(`[MCP][${serverName}][${toolName}] agent-name candidates`, {
+          hasMetadata: !!config?.metadata,
+          hasConfigurable: !!config?.configurable,
+          metadata_name: formatField(metadata?.name),
+          metadata_agent_name: formatField(metadata?.agent_name),
+          metadata_agentName: formatField(metadata?.agentName),
+          metadata_sender: formatField(metadata?.sender),
+          metadata_agent_id: formatField(metadata?.agent_id),
+          metadata_last_agent_id: formatField(metadata?.last_agent_id),
+          configurable_agent: configurable?.agent ? '<present>' : '<unset>',
+          configurable_agent_name: formatField(agentFromConfigurable),
+          configurable_agent_id: formatField(configurable?.agent_id),
+        });
+      }
 
       const result = await mcpManager.callTool({
         serverName,
         toolName,
         provider,
-        agentName: config?.metadata?.name,
+        agentName,
         toolArguments,
         options: {
           signal: derivedSignal,
