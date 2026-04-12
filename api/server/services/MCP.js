@@ -531,19 +531,21 @@ function createToolInstance({
         return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
       };
       if (!agentName) {
-        logger.info(`[MCP][${serverName}][${toolName}] agent-name candidates`, {
-          hasMetadata: !!config?.metadata,
-          hasConfigurable: !!config?.configurable,
-          metadata_name: formatField(metadata?.name),
-          metadata_agent_name: formatField(metadata?.agent_name),
-          metadata_agentName: formatField(metadata?.agentName),
-          metadata_sender: formatField(metadata?.sender),
-          metadata_agent_id: formatField(metadata?.agent_id),
-          metadata_last_agent_id: formatField(metadata?.last_agent_id),
-          configurable_agent: configurable?.agent ? '<present>' : '<unset>',
-          configurable_agent_name: formatField(agentFromConfigurable),
-          configurable_agent_id: formatField(configurable?.agent_id),
-        });
+        logger.info(
+          `[MCP][${serverName}][${toolName}] agent-name candidates ${JSON.stringify({
+            hasMetadata: !!config?.metadata,
+            hasConfigurable: !!config?.configurable,
+            metadata_name: formatField(metadata?.name),
+            metadata_agent_name: formatField(metadata?.agent_name),
+            metadata_agentName: formatField(metadata?.agentName),
+            metadata_sender: formatField(metadata?.sender),
+            metadata_agent_id: formatField(metadata?.agent_id),
+            metadata_last_agent_id: formatField(metadata?.last_agent_id),
+            configurable_agent: configurable?.agent ? '<present>' : '<unset>',
+            configurable_agent_name: formatField(agentFromConfigurable),
+            configurable_agent_id: formatField(configurable?.agent_id),
+          })}`,
+        );
       }
 
       const result = await mcpManager.callTool({
