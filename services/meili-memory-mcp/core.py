@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import re
+from collections.abc import Sequence
 from typing import Mapping, Any
 
 MAX_QUERY_LENGTH = int(os.getenv("MAX_QUERY_LENGTH", "250"))
@@ -89,41 +90,69 @@ def extract_headers_from_context(ctx: Any) -> dict[str, str]:
     if ctx is None:
         return {}
 
-    print("DEBUG ctx type:", type(ctx), flush=True)
-    print("DEBUG ctx dir:", dir(ctx), flush=True)
-
-    request_context = getattr(ctx, "request_context", None)
-    request = getattr(ctx, "request", None)
-    print("DEBUG request_context:", type(request_context), repr(request_context), flush=True)
-    print("DEBUG request:", type(request), repr(request), flush=True)
-
     def normalize_headers(headers: Mapping[str, Any]) -> dict[str, str]:
         normalized: dict[str, str] = {}
         for key, value in headers.items():
             normalized[str(key).lower()] = str(value)
         return normalized
 
+    def decode_header_part(value: Any) -> str:
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return str(value)
+
+    def normalize_asgi_headers(headers: Sequence[Any]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for item in headers:
+            if not isinstance(item, Sequence) or len(item) != 2:
+                continue
+            key, value = item
+            header_key = decode_header_part(key).lower()
+            header_value = decode_header_part(value)
+            normalized[header_key] = header_value
+        return normalized
+
     def extract_from_value(value: Any) -> dict[str, str]:
         if value is None:
             return {}
-        if isinstance(value, Mapping):
-            if "headers" in value and isinstance(value.get("headers"), Mapping):
-                return normalize_headers(value["headers"])
-            return normalize_headers(value)
 
         headers = getattr(value, "headers", None)
         if isinstance(headers, Mapping):
             return normalize_headers(headers)
+        if isinstance(headers, Sequence) and not isinstance(headers, (str, bytes, bytearray)):
+            normalized = normalize_asgi_headers(headers)
+            if normalized:
+                return normalized
 
         meta = getattr(value, "meta", None)
         if meta is not None:
             meta_headers = getattr(meta, "headers", None)
             if isinstance(meta_headers, Mapping):
                 return normalize_headers(meta_headers)
-            if isinstance(meta, Mapping) and isinstance(meta.get("headers"), Mapping):
-                return normalize_headers(meta["headers"])
+            if isinstance(meta_headers, Sequence) and not isinstance(
+                meta_headers,
+                (str, bytes, bytearray),
+            ):
+                normalized = normalize_asgi_headers(meta_headers)
+                if normalized:
+                    return normalized
+
+        if isinstance(value, Mapping) and "headers" in value:
+            mapping_headers = value.get("headers")
+            if isinstance(mapping_headers, Mapping):
+                return normalize_headers(mapping_headers)
+            if isinstance(mapping_headers, Sequence) and not isinstance(
+                mapping_headers,
+                (str, bytes, bytearray),
+            ):
+                normalized = normalize_asgi_headers(mapping_headers)
+                if normalized:
+                    return normalized
 
         return {}
+
+    request_context = getattr(ctx, "request_context", None)
+    request = getattr(ctx, "request", None)
 
     candidates = [
         ctx,

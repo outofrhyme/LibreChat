@@ -73,3 +73,33 @@ def test_extract_headers_from_nested_request_context():
     headers = extract_headers_from_context(Ctx())
     assert headers["x-librechat-user-id"] == "user-123"
     assert headers["authorization"] == "Bearer token"
+
+
+def test_extract_headers_from_asgi_style_scope_mapping():
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "headers": [
+            (b"x-librechat-user-id", b"user-123"),
+            (b"authorization", b"Bearer token"),
+        ],
+    }
+
+    headers = extract_headers_from_context(scope)
+    assert headers["x-librechat-user-id"] == "user-123"
+    assert headers["authorization"] == "Bearer token"
+    assert "type" not in headers
+    assert "method" not in headers
+
+
+def test_parse_caller_context_after_asgi_header_extraction():
+    scope = {
+        "headers": [
+            (b"x-librechat-user-id", b"user-123"),
+            (b"x-librechat-agent-name", b""),
+        ],
+    }
+    headers = extract_headers_from_context(scope)
+    caller = parse_caller_context(headers)
+    assert caller.user_id == "user-123"
+    assert caller.agent_display_name is None
