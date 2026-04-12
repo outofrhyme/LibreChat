@@ -9,6 +9,7 @@ from core import (
     build_search_filter,
     parse_search_input,
     parse_caller_context,
+    extract_headers_from_context,
 )
 
 
@@ -57,3 +58,18 @@ def test_parse_caller_context_accepts_user_id_alias():
     )
     assert caller.user_id == "user-abc"
     assert caller.agent_display_name == "Nolan (5.4)"
+
+
+def test_extract_headers_from_nested_request_context():
+    class Request:
+        headers = {"X-LibreChat-User-Id": "user-123", "Authorization": "Bearer token"}
+
+    class RequestContext:
+        request = Request()
+
+    class Ctx:
+        request_context = RequestContext()
+
+    headers = extract_headers_from_context(Ctx())
+    assert headers["x-librechat-user-id"] == "user-123"
+    assert headers["authorization"] == "Bearer token"

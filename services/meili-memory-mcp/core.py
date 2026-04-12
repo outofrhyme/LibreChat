@@ -13,8 +13,6 @@ USER_ID_HEADER = os.getenv("LIBRECHAT_USER_ID_HEADER", "x-librechat-user-id").lo
 AGENT_NAME_HEADER = os.getenv("LIBRECHAT_AGENT_NAME_HEADER", "x-librechat-agent-name").lower()
 USER_ID_HEADER_ALIASES = (
     USER_ID_HEADER,
-    "x-librechat-user-id",
-    "x-librechat-user-id".replace("-id", "-ID").lower(),
     "x-user-id",
     "user-id",
 )
@@ -88,24 +86,62 @@ def parse_caller_context(headers: Mapping[str, str]) -> CallerContext:
 
 
 def extract_headers_from_context(ctx: Any) -> dict[str, str]:
-    request = getattr(ctx, "request_context", None)
-    if request is None:
-        request = getattr(ctx, "request", None)
-    if request is None:
+    if ctx is None:
         return {}
 
-    headers = getattr(request, "headers", None)
-    if headers is None:
-        meta = getattr(request, "meta", None)
-        headers = getattr(meta, "headers", None) if meta is not None else None
+    print("DEBUG ctx type:", type(ctx), flush=True)
+    print("DEBUG ctx dir:", dir(ctx), flush=True)
 
-    if not isinstance(headers, Mapping):
+    request_context = getattr(ctx, "request_context", None)
+    request = getattr(ctx, "request", None)
+    print("DEBUG request_context:", type(request_context), repr(request_context), flush=True)
+    print("DEBUG request:", type(request), repr(request), flush=True)
+
+    def normalize_headers(headers: Mapping[str, Any]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for key, value in headers.items():
+            normalized[str(key).lower()] = str(value)
+        return normalized
+
+    def extract_from_value(value: Any) -> dict[str, str]:
+        if value is None:
+            return {}
+        if isinstance(value, Mapping):
+            if "headers" in value and isinstance(value.get("headers"), Mapping):
+                return normalize_headers(value["headers"])
+            return normalize_headers(value)
+
+        headers = getattr(value, "headers", None)
+        if isinstance(headers, Mapping):
+            return normalize_headers(headers)
+
+        meta = getattr(value, "meta", None)
+        if meta is not None:
+            meta_headers = getattr(meta, "headers", None)
+            if isinstance(meta_headers, Mapping):
+                return normalize_headers(meta_headers)
+            if isinstance(meta, Mapping) and isinstance(meta.get("headers"), Mapping):
+                return normalize_headers(meta["headers"])
+
         return {}
 
-    lowered: dict[str, str] = {}
-    for key, value in headers.items():
-        lowered[str(key).lower()] = str(value)
-    return lowered
+    candidates = [
+        ctx,
+        request_context,
+        request,
+        getattr(ctx, "fastmcp_context", None),
+        getattr(ctx, "meta", None),
+        getattr(ctx, "session", None),
+        getattr(request_context, "request", None) if request_context is not None else None,
+        getattr(request, "request", None) if request is not None else None,
+    ]
+
+    for candidate in candidates:
+        extracted = extract_from_value(candidate)
+        if extracted:
+            return extracted
+
+    return {}
 
 
 def build_user_filter(user_id: str) -> str:
