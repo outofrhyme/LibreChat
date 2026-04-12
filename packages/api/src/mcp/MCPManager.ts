@@ -250,6 +250,7 @@ Please follow these instructions when using tools from the respective MCP server
     oauthStart,
     oauthEnd,
     customUserVars,
+    agentName,
     graphTokenResolver,
   }: {
     user?: IUser;
@@ -259,6 +260,7 @@ Please follow these instructions when using tools from the respective MCP server
     toolArguments?: Record<string, unknown>;
     options?: RequestOptions;
     requestBody?: RequestBody;
+    agentName?: string;
     tokenMethods?: TokenMethods;
     customUserVars?: Record<string, string>;
     flowManager: FlowStateManager<MCPOAuthTokens | null>;
@@ -308,6 +310,7 @@ Please follow these instructions when using tools from the respective MCP server
       const currentOptions = processMCPEnv({
         user,
         body: requestBody,
+        agentName,
         dbSourced: isDbSourced,
         options: graphProcessedConfig,
         customUserVars,
