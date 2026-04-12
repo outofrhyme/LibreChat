@@ -531,7 +531,7 @@ function createToolInstance({
         return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
       };
       if (!agentName) {
-        logger.debug(`[MCP][${serverName}][${toolName}] agent-name candidates`, {
+        logger.info(`[MCP][${serverName}][${toolName}] agent-name candidates`, {
           hasMetadata: !!config?.metadata,
           hasConfigurable: !!config?.configurable,
           metadata_name: formatField(metadata?.name),
