@@ -577,6 +577,10 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
   };
 
   const client = new MeiliSearch({ host, apiKey });
+  const requiredFilterableAttributesByIndex: Record<string, string[]> = {
+    messages: ['user', 'sender', 'conversationId'],
+  };
+  const requiredFilterableAttributes = requiredFilterableAttributesByIndex[indexName] ?? ['user'];
 
   /** Create index only if it doesn't exist */
   const index = client.index<MeiliIndexable>(indexName);
@@ -602,12 +606,27 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
       }
     }
 
-    // Configure index settings to make 'user' field filterable
+    // Configure index settings to ensure required filterable attributes
     try {
-      await index.updateSettings({
-        filterableAttributes: ['user'],
-      });
-      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' filterable`);
+      const existingSettings = await index.getSettings();
+      const existingFilterableAttributes = Array.isArray(existingSettings.filterableAttributes)
+        ? existingSettings.filterableAttributes
+        : [];
+      const mergedFilterableAttributes = [...existingFilterableAttributes];
+      for (const attribute of requiredFilterableAttributes) {
+        if (!mergedFilterableAttributes.includes(attribute)) {
+          mergedFilterableAttributes.push(attribute);
+        }
+      }
+
+      if (mergedFilterableAttributes.length !== existingFilterableAttributes.length) {
+        await index.updateSettings({
+          filterableAttributes: mergedFilterableAttributes,
+        });
+        logger.debug(
+          `[mongoMeili] Updated index ${indexName} settings to include required filterable attributes: ${requiredFilterableAttributes.join(', ')}`,
+        );
+      }
     } catch (settingsError) {
       logger.error(`[mongoMeili] Error updating index settings for ${indexName}:`, settingsError);
     }
