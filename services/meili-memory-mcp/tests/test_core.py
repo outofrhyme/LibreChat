@@ -11,6 +11,7 @@ from core import (
     parse_caller_context,
     extract_headers_from_context,
 )
+from service import MemorySearchService
 
 
 def test_normalize_agent_display_name():
@@ -103,3 +104,95 @@ def test_parse_caller_context_after_asgi_header_extraction():
     caller = parse_caller_context(headers)
     assert caller.user_id == "user-123"
     assert caller.agent_display_name is None
+
+
+class FakeIndex:
+    def __init__(self, hits):
+        self._hits = hits
+        self.search_calls = []
+
+    def search(self, query, options):
+        self.search_calls.append((query, options))
+        if options.get("facets") == ["sender"]:
+            return {"facetDistribution": {}}
+        return {"hits": self._hits}
+
+
+class FakeClient:
+    def __init__(self, index):
+        self._index = index
+
+    def index(self, _name):
+        return self._index
+
+
+def test_search_memory_uses_non_empty_text_field():
+    index = FakeIndex(
+        [
+            {
+                "messageId": "m1",
+                "conversationId": "c1",
+                "sender": "assistant",
+                "text": "hello from text",
+                "content": [{"type": "text", "text": "ignored content text"}],
+            },
+        ],
+    )
+    service = MemorySearchService(client=FakeClient(index), index_name="messages")
+
+    records = service.search_memory(query="hello", user_id="user-1", agent_display_name=None)
+
+    assert records == [
+        {
+            "messageId": "m1",
+            "conversationId": "c1",
+            "sender": "assistant",
+            "text": "hello from text",
+        },
+    ]
+    assert index.search_calls[-1][1]["attributesToRetrieve"] == [
+        "messageId",
+        "conversationId",
+        "sender",
+        "text",
+        "content",
+    ]
+
+
+def test_search_memory_extracts_text_from_content_when_text_empty():
+    index = FakeIndex(
+        [
+            {
+                "messageId": "m2",
+                "conversationId": "c2",
+                "sender": "assistant",
+                "text": "   ",
+                "content": [
+                    {"type": "image", "text": "no"},
+                    {"type": "text", "text": "from content"},
+                ],
+            },
+        ],
+    )
+    service = MemorySearchService(client=FakeClient(index), index_name="messages")
+
+    records = service.search_memory(query="hello", user_id="user-1", agent_display_name=None)
+
+    assert records[0]["text"] == "from content"
+
+
+def test_search_memory_returns_empty_text_when_text_and_content_missing():
+    index = FakeIndex(
+        [
+            {
+                "messageId": "m3",
+                "conversationId": "c3",
+                "sender": "assistant",
+            },
+        ],
+    )
+    service = MemorySearchService(client=FakeClient(index), index_name="messages")
+
+    records = service.search_memory(query="hello", user_id="user-1", agent_display_name=None)
+
+    assert records[0]["text"] == ""

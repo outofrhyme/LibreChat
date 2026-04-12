@@ -90,7 +90,7 @@ class MemorySearchService:
             {
                 "filter": filters,
                 "limit": parsed.limit,
-                "attributesToRetrieve": ["messageId", "conversationId", "sender", "text"],
+                "attributesToRetrieve": ["messageId", "conversationId", "sender", "text", "content"],
             },
         )
 
@@ -107,10 +107,34 @@ class MemorySearchService:
                     "messageId": str(hit.get("messageId", "")),
                     "conversationId": str(hit.get("conversationId", "")),
                     "sender": str(hit.get("sender", "")),
-                    "text": str(hit.get("text", "")),
+                    "text": self._extract_text(hit),
                 },
             )
         return records
+
+    @staticmethod
+    def _extract_text(hit: dict[str, Any]) -> str:
+        text = hit.get("text")
+        if isinstance(text, str):
+            trimmed_text = text.strip()
+            if trimmed_text:
+                return trimmed_text
+
+        content = hit.get("content")
+        if isinstance(content, list):
+            for content_item in content:
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") != "text":
+                    continue
+                content_text = content_item.get("text")
+                if not isinstance(content_text, str):
+                    continue
+                trimmed_content_text = content_text.strip()
+                if trimmed_content_text:
+                    return trimmed_content_text
+
+        return ""
 
 
 def create_search_service() -> MemorySearchService:
