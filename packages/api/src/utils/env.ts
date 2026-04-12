@@ -164,6 +164,25 @@ function processUserPlaceholders(
   return value;
 }
 
+function processAgentNamePlaceholder(
+  value: string,
+  agentName?: string,
+  isHeader: boolean = false,
+  isUrl: boolean = false,
+): string {
+  if (typeof value !== 'string' || !value.includes('{{LIBRECHAT_AGENT_NAME}}')) {
+    return value;
+  }
+
+  const replacementValue = agentName ? String(agentName) : '';
+  const safeValue = isHeader
+    ? encodeHeaderValue(replacementValue)
+    : isUrl
+      ? encodeURIComponent(replacementValue)
+      : replacementValue;
+  return value.replace(/\{\{LIBRECHAT_AGENT_NAME\}\}/g, safeValue);
+}
+
 /**
  * Replaces request body field placeholders within a string.
  * Recognized placeholders: `{{LIBRECHAT_BODY_<FIELD>}}` where `<FIELD>` ∈ ALLOWED_BODY_FIELDS.
@@ -209,15 +228,19 @@ function processSingleValue({
   user,
   body = undefined,
   isHeader = false,
+  isUrl = false,
   dbSourced = false,
+  agentName,
 }: {
   originalValue: string;
   customUserVars?: Record<string, string>;
   user?: Partial<IUser>;
   body?: RequestBody;
   isHeader?: boolean;
+  isUrl?: boolean;
   /** When true, only resolve customUserVars — skip env vars, user/OpenID/body placeholders */
   dbSourced?: boolean;
+  agentName?: string;
 }): string {
   // Type guard: ensure we're working with a string
   if (typeof originalValue !== 'string') {
@@ -239,6 +262,7 @@ function processSingleValue({
     return value;
   }
 
+  value = processAgentNamePlaceholder(value, agentName, isHeader, isUrl);
   value = processUserPlaceholders(value, user, isHeader);
 
   const openidTokenInfo = extractOpenIDTokenInfo(user);
@@ -269,10 +293,11 @@ export function processMCPEnv(params: {
   user?: Partial<IUser>;
   customUserVars?: Record<string, string>;
   body?: RequestBody;
+  agentName?: string;
   /** When true, only resolve customUserVars — skip env vars, user/OpenID/body placeholders (for DB-stored servers) */
   dbSourced?: boolean;
 }): MCPOptions {
-  const { options, user, customUserVars, body } = params;
+  const { options, user, customUserVars, body, agentName } = params;
 
   if (options === null || options === undefined) {
     return options;
@@ -321,6 +346,7 @@ export function processMCPEnv(params: {
       processedEnv[key] = processSingleValue({
         user,
         body,
+        agentName,
         dbSourced,
         originalValue,
         customUserVars,
@@ -333,7 +359,7 @@ export function processMCPEnv(params: {
     const processedArgs: string[] = [];
     for (const originalValue of newObj.args) {
       processedArgs.push(
-        processSingleValue({ originalValue, customUserVars, user, body, dbSourced }),
+        processSingleValue({ originalValue, customUserVars, user, body, dbSourced, agentName }),
       );
     }
     newObj.args = processedArgs;
@@ -347,6 +373,7 @@ export function processMCPEnv(params: {
       processedHeaders[key] = processSingleValue({
         user,
         body,
+        agentName,
         dbSourced,
         originalValue,
         customUserVars,
@@ -361,6 +388,8 @@ export function processMCPEnv(params: {
     newObj.url = processSingleValue({
       user,
       body,
+      agentName,
+      isUrl: true,
       dbSourced,
       customUserVars,
       originalValue: newObj.url,
@@ -377,6 +406,7 @@ export function processMCPEnv(params: {
         processedOAuth[key] = processSingleValue({
           user,
           body,
+          agentName,
           dbSourced,
           originalValue,
           customUserVars,
