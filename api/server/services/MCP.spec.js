@@ -71,6 +71,10 @@ jest.mock('~/models', () => ({
   updateToken: jest.fn(),
 }));
 
+jest.mock('~/models/Agent', () => ({
+  getAgent: jest.fn(),
+}));
+
 jest.mock('./Tools/mcp', () => ({
   reinitMCPServer: jest.fn(),
 }));
@@ -916,6 +920,117 @@ describe('User parameter passing tests', () => {
           agentName: 'Stacy (5.2)',
         }),
       );
+    });
+
+    it('should resolve agentName from metadata.last_agent_id via getAgent', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      const mockGetMCPManager = require('~/config').getMCPManager;
+      const mockGetFlowStateManager = require('~/config').getFlowStateManager;
+      const mockGetLogStores = require('~/cache').getLogStores;
+      const mockGetAgent = require('~/models/Agent').getAgent;
+
+      mockGetMCPManager.mockReturnValue({
+        callTool: mockCallTool,
+      });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+      mockGetAgent.mockResolvedValue({ id: 'agent_n9KT8oof5a4FjIjMAZ09I', name: 'Nolan (5.4)' });
+
+      const availableTools = {
+        [`test-tool${D}test-server`]: {
+          function: {
+            description: 'Cached tool',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      };
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools,
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        {},
+        {
+          configurable: {
+            user_id: 'agent-user-id-only',
+          },
+          metadata: {
+            provider: 'openai',
+            thread_id: 'thread-1',
+            run_id: 'run-1',
+            last_agent_id: 'agent_n9KT8oof5a4FjIjMAZ09I',
+          },
+        },
+      );
+
+      expect(mockGetAgent).toHaveBeenCalledWith({ id: 'agent_n9KT8oof5a4FjIjMAZ09I' });
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentName: 'Nolan (5.4)',
+        }),
+      );
+    });
+
+    it('should cache resolved display name for repeated last_agent_id lookups', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      const mockGetMCPManager = require('~/config').getMCPManager;
+      const mockGetFlowStateManager = require('~/config').getFlowStateManager;
+      const mockGetLogStores = require('~/cache').getLogStores;
+      const mockGetAgent = require('~/models/Agent').getAgent;
+      const uniqueAgentId = 'agent_cache_test_unique_1';
+
+      mockGetMCPManager.mockReturnValue({
+        callTool: mockCallTool,
+      });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+      mockGetAgent.mockResolvedValue({ id: uniqueAgentId, name: 'Nolan (5.4)' });
+
+      const availableTools = {
+        [`test-tool${D}test-server`]: {
+          function: {
+            description: 'Cached tool',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      };
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools,
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      const invokeConfig = {
+        configurable: {
+          user_id: 'agent-user-id-only',
+        },
+        metadata: {
+          provider: 'openai',
+          thread_id: 'thread-1',
+          run_id: 'run-1',
+          last_agent_id: uniqueAgentId,
+        },
+      };
+
+      await toolInstance.func({}, invokeConfig);
+      await toolInstance.func({}, invokeConfig);
+
+      expect(mockGetAgent).toHaveBeenCalledTimes(1);
+      expect(mockCallTool).toHaveBeenCalledTimes(2);
     });
   });
 

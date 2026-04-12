@@ -28,11 +28,50 @@ const {
   getFlowStateManager,
   getMCPManager,
 } = require('~/config');
+const { getAgent } = require('~/models/Agent');
 const { findToken, createToken, updateToken } = require('~/models');
 const { getGraphApiToken } = require('./GraphTokenService');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getAppConfig } = require('./Config');
 const { getLogStores } = require('~/cache');
+
+const agentDisplayNameCache = new Map();
+const MAX_AGENT_DISPLAY_NAME_CACHE_SIZE = 1000;
+
+async function resolveAgentDisplayName(agentId) {
+  if (!agentId || typeof agentId !== 'string') {
+    return '';
+  }
+
+  const normalizedId = agentId.trim();
+  if (!normalizedId) {
+    return '';
+  }
+
+  const cachedName = agentDisplayNameCache.get(normalizedId);
+  if (typeof cachedName === 'string' && cachedName.length > 0) {
+    return cachedName;
+  }
+
+  const resolvedAgent = await getAgent({ id: normalizedId });
+  const resolvedName =
+    resolvedAgent?.name != null && typeof resolvedAgent.name === 'string'
+      ? resolvedAgent.name.trim()
+      : '';
+
+  if (!resolvedName) {
+    return '';
+  }
+
+  if (agentDisplayNameCache.size >= MAX_AGENT_DISPLAY_NAME_CACHE_SIZE) {
+    const oldestKey = agentDisplayNameCache.keys().next().value;
+    if (oldestKey != null) {
+      agentDisplayNameCache.delete(oldestKey);
+    }
+  }
+  agentDisplayNameCache.set(normalizedId, resolvedName);
+  return resolvedName;
+}
 
 function isEmptyObjectSchema(jsonSchema) {
   return (
@@ -514,38 +553,14 @@ function createToolInstance({
         metadata?.agentName,
         metadata?.sender,
       ];
-      const agentName = candidateAgentNames.find(
+      let agentName = candidateAgentNames.find(
         (value) => typeof value === 'string' && value.trim().length > 0,
       );
-      const formatField = (value) => {
-        if (value == null) {
-          return '<unset>';
+      if (!agentName && typeof metadata?.last_agent_id === 'string' && metadata.last_agent_id.trim()) {
+        const resolvedName = await resolveAgentDisplayName(metadata.last_agent_id);
+        if (resolvedName) {
+          agentName = resolvedName;
         }
-        if (typeof value !== 'string') {
-          return `<${typeof value}>`;
-        }
-        const trimmed = value.trim();
-        if (!trimmed) {
-          return '<empty>';
-        }
-        return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
-      };
-      if (!agentName) {
-        logger.info(
-          `[MCP][${serverName}][${toolName}] agent-name candidates ${JSON.stringify({
-            hasMetadata: !!config?.metadata,
-            hasConfigurable: !!config?.configurable,
-            metadata_name: formatField(metadata?.name),
-            metadata_agent_name: formatField(metadata?.agent_name),
-            metadata_agentName: formatField(metadata?.agentName),
-            metadata_sender: formatField(metadata?.sender),
-            metadata_agent_id: formatField(metadata?.agent_id),
-            metadata_last_agent_id: formatField(metadata?.last_agent_id),
-            configurable_agent: configurable?.agent ? '<present>' : '<unset>',
-            configurable_agent_name: formatField(agentFromConfigurable),
-            configurable_agent_id: formatField(configurable?.agent_id),
-          })}`,
-        );
       }
 
       const result = await mcpManager.callTool({
