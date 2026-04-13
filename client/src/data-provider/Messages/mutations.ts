@@ -103,6 +103,120 @@ type BranchMessageContext = {
   conversationId: string | null;
 };
 
+type DeleteMessageContext = {
+  previousMessages: t.TMessage[] | undefined;
+  remainingMessages: t.TMessage[];
+  deletedMessageId: string;
+  fallbackMessage: t.TMessage | null;
+};
+
+export const useDeleteMessageMutation = (
+  _options?: t.MutationOptions<void, t.TDeleteMessageRequest, DeleteMessageContext>,
+): UseMutationResult<void, Error, t.TDeleteMessageRequest, DeleteMessageContext> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, onError, onMutate: userOnMutate, ...options } = _options ?? {};
+
+  const mutationOptions: UseMutationOptions<
+    void,
+    Error,
+    t.TDeleteMessageRequest,
+    DeleteMessageContext
+  > = {
+    mutationFn: (variables: t.TDeleteMessageRequest) => dataService.deleteMessage(variables),
+    onMutate: async (vars) => {
+      if (userOnMutate) {
+        await userOnMutate(vars);
+      }
+
+      await queryClient.cancelQueries([QueryKeys.messages, vars.conversationId]);
+      const previousMessages = queryClient.getQueryData<t.TMessage[]>([
+        QueryKeys.messages,
+        vars.conversationId,
+      ]);
+
+      if (!previousMessages || previousMessages.length === 0) {
+        return {
+          previousMessages,
+          remainingMessages: [],
+          deletedMessageId: vars.messageId,
+          fallbackMessage: null,
+        };
+      }
+
+      const deletedIndex = previousMessages.findIndex(
+        (message) => message.messageId === vars.messageId,
+      );
+      const deletedMessage = previousMessages[deletedIndex];
+      const remainingMessages = previousMessages.filter(
+        (message) => message.messageId !== vars.messageId,
+      );
+
+      let fallbackMessage: t.TMessage | null = null;
+      if (deletedMessage?.parentMessageId) {
+        fallbackMessage =
+          remainingMessages.find(
+            (message) => message.messageId === deletedMessage.parentMessageId,
+          ) ?? null;
+      }
+      if (!fallbackMessage && deletedIndex > 0) {
+        fallbackMessage = remainingMessages[deletedIndex - 1] ?? null;
+      }
+      if (!fallbackMessage) {
+        fallbackMessage = remainingMessages[0] ?? null;
+      }
+
+      queryClient.setQueryData<t.TMessage[]>(
+        [QueryKeys.messages, vars.conversationId],
+        remainingMessages,
+      );
+
+      return {
+        previousMessages,
+        remainingMessages,
+        deletedMessageId: vars.messageId,
+        fallbackMessage,
+      };
+    },
+    onError: (error, vars, context) => {
+      const errorResponse = (
+        error as Error & {
+          response?: {
+            status?: number;
+            data?: unknown;
+          };
+        }
+      ).response;
+      console.error('[useDeleteMessageMutation] onError', {
+        conversationId: vars.conversationId,
+        messageId: vars.messageId,
+        status: errorResponse?.status,
+        body: errorResponse?.data,
+        error: error.message,
+      });
+      if (context?.previousMessages) {
+        queryClient.setQueryData<t.TMessage[]>(
+          [QueryKeys.messages, vars.conversationId],
+          context.previousMessages,
+        );
+      }
+      onError?.(error, vars, context);
+    },
+    onSuccess: (data, vars, context) => {
+      console.debug('[useDeleteMessageMutation] onSuccess', {
+        conversationId: vars.conversationId,
+        messageId: vars.messageId,
+        status: 204,
+        body: data,
+      });
+      queryClient.invalidateQueries([QueryKeys.messages, vars.conversationId]);
+      onSuccess?.(data, vars, context);
+    },
+    ...options,
+  };
+
+  return useMutation(mutationOptions);
+};
+
 export const useBranchMessageMutation = (
   conversationId: string | null,
   _options?: t.BranchMessageOptions,
