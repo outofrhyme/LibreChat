@@ -24,7 +24,7 @@ type THoverButtons = {
   isSubmitting: boolean;
   message: TMessage;
   regenerate: () => void;
-  deleteMessage?: () => void;
+  deleteMessage: () => void;
   handleContinue: (e: React.MouseEvent<HTMLButtonElement>) => void;
   latestMessageId?: string;
   isLast: boolean;
@@ -195,12 +195,6 @@ const HoverButtons = ({
   const handleCopy = () => copyToClipboard(setIsCopied);
   const handleDelete = () => {
     console.debug('[HoverButtons] delete click', { messageId: message.messageId });
-    if (!deleteMessage) {
-      console.error('[HoverButtons] deleteMessage handler missing', {
-        messageId: message.messageId,
-      });
-      return;
-    }
     deleteMessage();
   };
 
