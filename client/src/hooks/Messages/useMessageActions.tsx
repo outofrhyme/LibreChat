@@ -133,6 +133,11 @@ export default function useMessageActions(props: TMessageActions) {
       return;
     }
 
+    console.debug('[useMessageActions] deleteMessage mutate', {
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+
     deleteMessageMutation.mutate({
       conversationId: conversation.conversationId,
       messageId,
