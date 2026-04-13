@@ -404,8 +404,28 @@ router.put('/:conversationId/:messageId/feedback', validateMessageReq, async (re
 
 router.delete('/:conversationId/:messageId', validateMessageReq, async (req, res) => {
   try {
-    const { messageId } = req.params;
-    await deleteMessages({ messageId });
+    const { conversationId, messageId } = req.params;
+    const user = req.user.id ?? '';
+    const message = await getMessages({ conversationId, user, messageId }, 'messageId');
+    if (!message || message.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const childMessages = await getMessages(
+      { conversationId, user, parentMessageId: messageId },
+      'messageId',
+    );
+    if (childMessages.length > 0) {
+      return res.status(409).json({
+        error: 'Cannot delete a message that has child messages',
+      });
+    }
+
+    await deleteMessages({
+      user,
+      conversationId,
+      messageId,
+    });
     res.status(204).send();
   } catch (error) {
     logger.error('Error deleting message:', error);
