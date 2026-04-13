@@ -12,6 +12,7 @@ import {
 } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
 import { useChatContext, useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
+import { useDeleteMessageMutation } from '~/data-provider';
 import useCopyToClipboard from './useCopyToClipboard';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetAddedConvo } from '~/hooks/Chat';
@@ -40,6 +41,7 @@ export default function useMessageActions(props: TMessageActions) {
     latestMessageId,
     latestMessageDepth,
     handleContinue,
+    setLatestMessage,
   } = useChatContext();
 
   const getAddedConvo = useGetAddedConvo();
@@ -107,6 +109,40 @@ export default function useMessageActions(props: TMessageActions) {
   }, [isSubmitting, isCreatedByUser, message, regenerate, getAddedConvo]);
 
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
+  const deleteMessageMutation = useDeleteMessageMutation({
+    onSuccess: (_data, vars, context) => {
+      if (!context || latestMessageId !== vars.messageId) {
+        return;
+      }
+      setLatestMessage(context.fallbackMessage);
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previousMessages == null) {
+        return;
+      }
+      const previousMessage =
+        context.previousMessages.find(
+          (message) => message.messageId === context.deletedMessageId,
+        ) ?? null;
+      setLatestMessage(previousMessage);
+    },
+  });
+
+  const deleteMessage = useCallback(() => {
+    if (!conversation?.conversationId || !messageId) {
+      return;
+    }
+
+    console.debug('[useMessageActions] deleteMessage mutate', {
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+
+    deleteMessageMutation.mutate({
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+  }, [conversation?.conversationId, deleteMessageMutation, messageId]);
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
@@ -164,6 +200,7 @@ export default function useMessageActions(props: TMessageActions) {
     messageLabel,
     handleFeedback,
     handleContinue,
+    deleteMessage,
     copyToClipboard,
     latestMessageId,
     regenerateMessage,
