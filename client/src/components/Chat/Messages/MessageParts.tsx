@@ -3,7 +3,13 @@ import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
-import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
+import {
+  useLocalize,
+  useAttachments,
+  useMessageActions,
+  useContentMetadata,
+  useMessageHelpers,
+} from '~/hooks';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import ContentParts from './Content/ContentParts';
 import { fontSizeAtom } from '~/store/fontSize';
@@ -37,6 +43,11 @@ export default function Message(props: TMessageProps) {
     copyToClipboard,
     regenerateMessage,
   } = useMessageHelpers(props);
+  const { deleteMessage } = useMessageActions({
+    message,
+    currentEditId,
+    setCurrentEditId,
+  });
 
   const fontSize = useAtomValue(fontSizeAtom);
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
@@ -164,6 +175,7 @@ export default function Message(props: TMessageProps) {
                       conversation={conversation ?? null}
                       regenerate={() => regenerateMessage()}
                       copyToClipboard={copyToClipboard}
+                      deleteMessage={deleteMessage}
                       handleContinue={handleContinue}
                       latestMessageId={latestMessageId}
                       isLast={isLast}
