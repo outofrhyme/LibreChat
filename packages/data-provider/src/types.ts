@@ -233,6 +233,11 @@ export type TUpdateMessageContent = {
   text: string;
 };
 
+export type TDeleteMessageRequest = {
+  conversationId: string;
+  messageId: string;
+};
+
 export type TUpdateUserKeyRequest = {
   name: string;
   value: string;
