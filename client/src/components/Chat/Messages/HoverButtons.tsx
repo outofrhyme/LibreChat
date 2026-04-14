@@ -193,10 +193,7 @@ const HoverButtons = ({
   };
 
   const handleCopy = () => copyToClipboard(setIsCopied);
-  const handleDelete = () => {
-    console.debug('[HoverButtons] delete click', { messageId: message.messageId });
-    deleteMessage();
-  };
+  const handleDelete = () => deleteMessage();
 
   return (
     <div className="group visible flex justify-center gap-0.5 self-end focus-within:outline-none lg:justify-start">

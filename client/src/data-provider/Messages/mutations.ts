@@ -178,21 +178,6 @@ export const useDeleteMessageMutation = (
       };
     },
     onError: (error, vars, context) => {
-      const errorResponse = (
-        error as Error & {
-          response?: {
-            status?: number;
-            data?: unknown;
-          };
-        }
-      ).response;
-      console.error('[useDeleteMessageMutation] onError', {
-        conversationId: vars.conversationId,
-        messageId: vars.messageId,
-        status: errorResponse?.status,
-        body: errorResponse?.data,
-        error: error.message,
-      });
       if (context?.previousMessages) {
         queryClient.setQueryData<t.TMessage[]>(
           [QueryKeys.messages, vars.conversationId],
@@ -202,12 +187,6 @@ export const useDeleteMessageMutation = (
       onError?.(error, vars, context);
     },
     onSuccess: (data, vars, context) => {
-      console.debug('[useDeleteMessageMutation] onSuccess', {
-        conversationId: vars.conversationId,
-        messageId: vars.messageId,
-        status: 204,
-        body: data,
-      });
       queryClient.invalidateQueries([QueryKeys.messages, vars.conversationId]);
       onSuccess?.(data, vars, context);
     },
