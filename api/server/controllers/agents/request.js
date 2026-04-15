@@ -103,7 +103,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   const safeOriginalText = typeof originalText === 'string' ? originalText : '';
   const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
   const text = sanitizedOriginalText
-    ? `${timestampPrefix} ${sanitizedOriginalText}`
+    ? `${timestampPrefix}\n${sanitizedOriginalText}`
     : timestampPrefix;
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
@@ -514,7 +514,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
   const safeOriginalText = typeof originalText === 'string' ? originalText : '';
   const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
   const text = sanitizedOriginalText
-    ? `${timestampPrefix} ${sanitizedOriginalText}`
+    ? `${timestampPrefix}\n${sanitizedOriginalText}`
     : timestampPrefix;
 
   // Create handler to avoid capturing the entire parent scope
