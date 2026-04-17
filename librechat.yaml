@@ -1,0 +1,63 @@
+version: 1.3.6
+
+cache: true
+fileStrategy: "local"
+
+modelSpecs:
+  enforce: false
+  prioritize: true
+  list:
+    - name: "phoebe-kirby"
+      label: "Kirby"
+      preset:
+        endpoint: "agents"
+        agent_id: "agent_BlPvlGUrnLey8HQ9bIHHv"
+
+    - name: "hannah-daisy"
+      label: "Daisy"
+      preset:
+        endpoint: "agents"
+        agent_id: "agent_k9P7Nfn7JYU4czjxT89_6"
+
+interface:
+  endpointsMenu: false
+  modelSelect: true
+  parameters: false
+  agents:
+    use: true
+
+endpoints:
+  openAI:
+    enabled: true
+    models:
+      fetch: true
+  anthropic:
+    enabled: true
+  google:
+    enabled: true
+  agents:
+    enabled: true
+    allowedProviders:
+      - openAI
+      - anthropic
+      - google
+
+mcpServers:
+  remember-when:
+    title: "Remember When"
+    description: "Search prior conversations scoped to the current user and agent."
+    type: streamable-http
+    chatMenu: false
+    url: "https://rememberwhen-production.up.railway.app/mcp"
+    headers:
+      Authorization: "Bearer ${REMEMBER_WHEN_MCP_TOKEN}"
+      X-LibreChat-User-Id: "{{LIBRECHAT_USER_ID}}"
+      X-LibreChat-Agent-Name: "{{LIBRECHAT_AGENT_NAME}}"
+
+balance:
+  enabled: true
+  startBalance: 100000
+  autoRefillEnabled: true
+  refillAmount: 100000
+  refillIntervalValue: 4
+  refillIntervalUnit: "hours"
