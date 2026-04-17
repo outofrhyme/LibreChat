@@ -32,13 +32,61 @@ function createCloseHandler(abortController) {
   };
 }
 
+const padTimestampPart = (value) => value.toString().padStart(2, '0');
+
+function formatTimestamp(date) {
+  return (
+    [
+      date.getFullYear(),
+      padTimestampPart(date.getMonth() + 1),
+      padTimestampPart(date.getDate()),
+    ].join('-') +
+    ` ${[padTimestampPart(date.getHours()), padTimestampPart(date.getMinutes()), padTimestampPart(date.getSeconds())].join(':')}`
+  );
+}
+
+const LEADING_MSG_TIME_PREFIX_REGEX = /^\[msg_time:\s[^\]]+\]\s*/;
+
+const stripLeadingMsgTimePrefix = (text) => text.replace(LEADING_MSG_TIME_PREFIX_REGEX, '');
+
+function buildMessageTimestamp(clientTimezone) {
+  if (clientTimezone) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: clientTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      const parts = formatter.formatToParts(new Date());
+      const lookup = new Map(parts.map((part) => [part.type, part.value]));
+      const stamp = `${lookup.get('year')}-${lookup.get('month')}-${lookup.get('day')} ${lookup.get('hour')}:${lookup.get('minute')}:${lookup.get('second')}`;
+      return `[msg_time: ${stamp} ${clientTimezone}]`;
+    } catch (_error) {
+      logger.debug(
+        '[AgentController] Invalid client timezone provided, using server local timezone',
+        {
+          clientTimezone,
+        },
+      );
+    }
+  }
+
+  const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'server-local';
+  return `[msg_time: ${formatTimestamp(new Date())} ${serverTimezone}]`;
+}
+
 /**
  * Resumable Agent Controller - Generation runs independently of HTTP connection.
  * Returns streamId immediately, client subscribes separately via SSE.
  */
 const ResumableAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -47,9 +95,16 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     parentMessageId = null,
     overrideParentMessageId = null,
     responseMessageId: editedResponseMessageId = null,
+    clientTimezone = null,
   } = req.body;
 
   const userId = req.user.id;
+  const timestampPrefix = buildMessageTimestamp(clientTimezone);
+  const safeOriginalText = typeof originalText === 'string' ? originalText : '';
+  const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
+  const text = sanitizedOriginalText
+    ? `${timestampPrefix}\n${sanitizedOriginalText}`
+    : timestampPrefix;
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
   if (!allowed) {
@@ -360,7 +415,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
         if (shouldGenerateTitle) {
           addTitle(req, {
-            text,
+            text: originalText,
             response: { ...response },
             client,
           })
@@ -440,7 +495,7 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
  */
 const _LegacyAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -449,6 +504,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     parentMessageId = null,
     overrideParentMessageId = null,
     responseMessageId: editedResponseMessageId = null,
+    clientTimezone = null,
   } = req.body;
 
   // Generate conversationId upfront if not provided - streamId === conversationId always
@@ -466,6 +522,12 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
   // Match the same logic used for conversationId generation above
   const isNewConvo = !reqConversationId || reqConversationId === 'new';
   const userId = req.user.id;
+  const timestampPrefix = buildMessageTimestamp(clientTimezone);
+  const safeOriginalText = typeof originalText === 'string' ? originalText : '';
+  const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
+  const text = sanitizedOriginalText
+    ? `${timestampPrefix}\n${sanitizedOriginalText}`
+    : timestampPrefix;
 
   // Create handler to avoid capturing the entire parent scope
   let getReqData = (data = {}) => {
@@ -720,7 +782,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     // Add title if needed - extract minimal data
     if (addTitle && parentMessageId === Constants.NO_PARENT && isNewConvo) {
       addTitle(req, {
-        text,
+        text: originalText,
         response: { ...response },
         client,
       })

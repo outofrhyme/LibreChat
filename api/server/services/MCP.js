@@ -23,7 +23,7 @@ const {
   getFlowStateManager,
   getMCPManager,
 } = require('~/config');
-const { findToken, createToken, updateToken, deleteTokens } = require('~/models');
+const { getAgent, findToken, createToken, updateToken, deleteTokens } = require('~/models');
 const { getGraphApiToken } = require('./GraphTokenService');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getAppConfig } = require('./Config');
@@ -35,6 +35,43 @@ const RECONNECT_THROTTLE_MS = 10_000;
 
 const missingToolCache = new Map();
 const MISSING_TOOL_TTL_MS = 10_000;
+const agentDisplayNameCache = new Map();
+const MAX_AGENT_DISPLAY_NAME_CACHE_SIZE = 1000;
+
+async function resolveAgentDisplayName(agentId) {
+  if (!agentId || typeof agentId !== 'string') {
+    return '';
+  }
+
+  const normalizedId = agentId.trim();
+  if (!normalizedId) {
+    return '';
+  }
+
+  const cachedName = agentDisplayNameCache.get(normalizedId);
+  if (typeof cachedName === 'string' && cachedName.length > 0) {
+    return cachedName;
+  }
+
+  const resolvedAgent = await getAgent({ id: normalizedId });
+  const resolvedName =
+    resolvedAgent?.name != null && typeof resolvedAgent.name === 'string'
+      ? resolvedAgent.name.trim()
+      : '';
+
+  if (!resolvedName) {
+    return '';
+  }
+
+  if (agentDisplayNameCache.size >= MAX_AGENT_DISPLAY_NAME_CACHE_SIZE) {
+    const oldestKey = agentDisplayNameCache.keys().next().value;
+    if (oldestKey != null) {
+      agentDisplayNameCache.delete(oldestKey);
+    }
+  }
+  agentDisplayNameCache.set(normalizedId, resolvedName);
+  return resolvedName;
+}
 
 function evictStale(map, ttl) {
   if (map.size <= MAX_CACHE_SIZE) {
@@ -584,6 +621,51 @@ function createToolInstance({
 
   const normalizedToolKey = `${toolName}${Constants.mcp_delimiter}${normalizeServerName(serverName)}`;
 
+  /**
+   * Normalize tool argument keys to canonical schema property names (case-insensitive).
+   * - Schema `properties` are the source of truth.
+   * - If canonical and non-canonical keys both exist, canonical wins.
+   * - Non-canonical duplicates are removed to avoid schema validation failures downstream.
+   * @param {unknown} rawArguments
+   * @param {import('@librechat/api').JsonSchemaType | null} targetSchema
+   * @returns {unknown}
+   */
+  const normalizeToolArgumentKeys = (rawArguments, targetSchema) => {
+    if (!rawArguments || typeof rawArguments !== 'object' || Array.isArray(rawArguments)) {
+      return rawArguments;
+    }
+
+    const schemaProperties = targetSchema?.properties;
+    if (!schemaProperties || typeof schemaProperties !== 'object') {
+      return rawArguments;
+    }
+
+    const canonicalKeys = Object.keys(schemaProperties);
+    if (canonicalKeys.length === 0) {
+      return rawArguments;
+    }
+
+    const lowerToCanonical = canonicalKeys.reduce((acc, key) => {
+      acc[key.toLowerCase()] = key;
+      return acc;
+    }, {});
+
+    const normalizedArguments = { ...rawArguments };
+    for (const [incomingKey, incomingValue] of Object.entries(rawArguments)) {
+      const canonicalKey = lowerToCanonical[incomingKey.toLowerCase()];
+      if (!canonicalKey || canonicalKey === incomingKey) {
+        continue;
+      }
+
+      if (!(canonicalKey in normalizedArguments)) {
+        normalizedArguments[canonicalKey] = incomingValue;
+      }
+      delete normalizedArguments[incomingKey];
+    }
+
+    return normalizedArguments;
+  };
+
   /** @type {(toolArguments: Object | string, config?: GraphRunnableConfig) => Promise<unknown>} */
   const _call = async (toolArguments, config) => {
     const userId = config?.configurable?.user?.id || config?.configurable?.user_id;
@@ -626,17 +708,47 @@ function createToolInstance({
 
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
+      const mcpUser = config?.configurable?.user ?? (userId ? { id: userId } : undefined);
+      const metadata = config?.metadata ?? {};
+      const configurable = config?.configurable ?? {};
+      const agentFromConfigurable =
+        configurable?.agent != null && typeof configurable.agent === 'object'
+          ? configurable.agent.name
+          : undefined;
+      const candidateAgentNames = [
+        metadata?.name,
+        agentFromConfigurable,
+        metadata?.agent_name,
+        metadata?.agentName,
+        metadata?.sender,
+      ];
+      let agentName = candidateAgentNames.find(
+        (value) => typeof value === 'string' && value.trim().length > 0,
+      );
+      if (
+        !agentName &&
+        typeof metadata?.last_agent_id === 'string' &&
+        metadata.last_agent_id.trim()
+      ) {
+        const resolvedName = await resolveAgentDisplayName(metadata.last_agent_id);
+        if (resolvedName) {
+          agentName = resolvedName;
+        }
+      }
+
+      const normalizedToolArguments = normalizeToolArgumentKeys(toolArguments, schema);
 
       const result = await mcpManager.callTool({
         serverName,
         serverConfig: capturedServerConfig,
         toolName,
         provider,
-        toolArguments,
+        agentName,
+        toolArguments: normalizedToolArguments,
         options: {
           signal: derivedSignal,
         },
-        user: config?.configurable?.user,
+        user: mcpUser,
         requestBody: config?.configurable?.requestBody,
         customUserVars,
         flowManager,

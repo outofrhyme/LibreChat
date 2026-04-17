@@ -106,6 +106,7 @@ const MessageRender = memo(function MessageRender({
     messageLabel,
     handleFeedback,
     handleContinue,
+    deleteMessage,
     latestMessageId,
     copyToClipboard,
     regenerateMessage,
@@ -252,6 +253,7 @@ const MessageRender = memo(function MessageRender({
                 conversation={conversation ?? null}
                 regenerate={handleRegenerateMessage}
                 copyToClipboard={copyToClipboard}
+                deleteMessage={deleteMessage}
                 handleContinue={handleContinue}
                 latestMessageId={latestMessageId}
                 handleFeedback={handleFeedback}
