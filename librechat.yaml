@@ -9,8 +9,8 @@ summarization:
   maxSummaryTokens: 550
   reserveRatio: 0.05
   trigger:
-    type: "token_ratio"
-    value: 0.9
+    type: "token_count"
+    value: 10000   # or similar, tune later
   contextPruning:
     enabled: false
 
