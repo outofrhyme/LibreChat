@@ -3,16 +3,16 @@ version: 1.3.8
 cache: true
 fileStrategy: "local"
 
-summarization:
-  provider: "openAI"
-  model: "gpt-5.4-mini"
-  maxSummaryTokens: 550
-  reserveRatio: 0.05
-  trigger:
-    type: "token_count"
-    value: 10000   # or similar, tune later
-  contextPruning:
-    enabled: false
+#summarization:
+#  provider: "openAI"
+#  model: "gpt-5.4-mini"
+#  maxSummaryTokens: 550
+#  reserveRatio: 0.05
+#  trigger:
+#    type: "token_count"
+#    value: 10000   # or similar, tune later
+#  contextPruning:
+#    enabled: false
 
 modelSpecs:
   enforce: false
