@@ -68,9 +68,11 @@ jest.mock('~/cache', () => ({
 }));
 
 jest.mock('~/models', () => ({
+  getAgent: jest.fn(),
   findToken: jest.fn(),
   createToken: jest.fn(),
   updateToken: jest.fn(),
+  deleteTokens: jest.fn(),
 }));
 
 jest.mock('~/models/Agent', () => ({
@@ -935,7 +937,7 @@ describe('User parameter passing tests', () => {
       const mockGetMCPManager = require('~/config').getMCPManager;
       const mockGetFlowStateManager = require('~/config').getFlowStateManager;
       const mockGetLogStores = require('~/cache').getLogStores;
-      const mockGetAgent = require('~/models/Agent').getAgent;
+      const mockGetAgent = require('~/models').getAgent;
 
       mockGetMCPManager.mockReturnValue({
         callTool: mockCallTool,
@@ -992,7 +994,7 @@ describe('User parameter passing tests', () => {
       const mockGetMCPManager = require('~/config').getMCPManager;
       const mockGetFlowStateManager = require('~/config').getFlowStateManager;
       const mockGetLogStores = require('~/cache').getLogStores;
-      const mockGetAgent = require('~/models/Agent').getAgent;
+      const mockGetAgent = require('~/models').getAgent;
       const uniqueAgentId = 'agent_cache_test_unique_1';
 
       mockGetMCPManager.mockReturnValue({

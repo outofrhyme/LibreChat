@@ -23,8 +23,7 @@ const {
   getFlowStateManager,
   getMCPManager,
 } = require('~/config');
-const { getAgent } = require('~/models/Agent');
-const { findToken, createToken, updateToken, deleteTokens } = require('~/models');
+const { getAgent, findToken, createToken, updateToken, deleteTokens } = require('~/models');
 const { getGraphApiToken } = require('./GraphTokenService');
 const { reinitMCPServer } = require('./Tools/mcp');
 const { getAppConfig } = require('./Config');
