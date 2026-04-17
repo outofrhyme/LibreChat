@@ -1,7 +1,10 @@
-version: 1.3.6
+version: 1.3.8
 
 cache: true
 fileStrategy: "local"
+
+summarization:
+  enabled: false
 
 modelSpecs:
   enforce: false
@@ -20,7 +23,6 @@ modelSpecs:
         agent_id: "agent_k9P7Nfn7JYU4czjxT89_6"
 
 interface:
-  endpointsMenu: false
   modelSelect: true
   parameters: false
   agents:

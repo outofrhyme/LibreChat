@@ -75,6 +75,10 @@ jest.mock('~/models', () => ({
   deleteTokens: jest.fn(),
 }));
 
+jest.mock('~/models/Agent', () => ({
+  getAgent: jest.fn(),
+}));
+
 jest.mock('./Tools/mcp', () => ({
   reinitMCPServer: jest.fn(),
 }));
