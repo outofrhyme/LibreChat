@@ -621,6 +621,51 @@ function createToolInstance({
 
   const normalizedToolKey = `${toolName}${Constants.mcp_delimiter}${normalizeServerName(serverName)}`;
 
+  /**
+   * Normalize tool argument keys to canonical schema property names (case-insensitive).
+   * - Schema `properties` are the source of truth.
+   * - If canonical and non-canonical keys both exist, canonical wins.
+   * - Non-canonical duplicates are removed to avoid schema validation failures downstream.
+   * @param {unknown} rawArguments
+   * @param {import('@librechat/api').JsonSchemaType | null} targetSchema
+   * @returns {unknown}
+   */
+  const normalizeToolArgumentKeys = (rawArguments, targetSchema) => {
+    if (!rawArguments || typeof rawArguments !== 'object' || Array.isArray(rawArguments)) {
+      return rawArguments;
+    }
+
+    const schemaProperties = targetSchema?.properties;
+    if (!schemaProperties || typeof schemaProperties !== 'object') {
+      return rawArguments;
+    }
+
+    const canonicalKeys = Object.keys(schemaProperties);
+    if (canonicalKeys.length === 0) {
+      return rawArguments;
+    }
+
+    const lowerToCanonical = canonicalKeys.reduce((acc, key) => {
+      acc[key.toLowerCase()] = key;
+      return acc;
+    }, {});
+
+    const normalizedArguments = { ...rawArguments };
+    for (const [incomingKey, incomingValue] of Object.entries(rawArguments)) {
+      const canonicalKey = lowerToCanonical[incomingKey.toLowerCase()];
+      if (!canonicalKey || canonicalKey === incomingKey) {
+        continue;
+      }
+
+      if (!(canonicalKey in normalizedArguments)) {
+        normalizedArguments[canonicalKey] = incomingValue;
+      }
+      delete normalizedArguments[incomingKey];
+    }
+
+    return normalizedArguments;
+  };
+
   /** @type {(toolArguments: Object | string, config?: GraphRunnableConfig) => Promise<unknown>} */
   const _call = async (toolArguments, config) => {
     const userId = config?.configurable?.user?.id || config?.configurable?.user_id;
@@ -691,13 +736,15 @@ function createToolInstance({
         }
       }
 
+      const normalizedToolArguments = normalizeToolArgumentKeys(toolArguments, schema);
+
       const result = await mcpManager.callTool({
         serverName,
         serverConfig: capturedServerConfig,
         toolName,
         provider,
         agentName,
-        toolArguments,
+        toolArguments: normalizedToolArguments,
         options: {
           signal: derivedSignal,
         },
