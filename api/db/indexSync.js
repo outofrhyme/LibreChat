@@ -89,19 +89,40 @@ async function deleteDocumentsWithoutUserField(index, indexName) {
 async function ensureFilterableAttributes(client) {
   let settingsUpdated = false;
   let hasOrphanedDocs = false;
+  const requiredMessagesFilterableAttributes = ['user', 'sender', 'conversationId'];
+
+  const mergeRequiredFilterableAttributes = (currentAttributes, requiredAttributes) => {
+    const existing = Array.isArray(currentAttributes) ? currentAttributes : [];
+    const merged = [...existing];
+    for (const requiredAttribute of requiredAttributes) {
+      if (!merged.includes(requiredAttribute)) {
+        merged.push(requiredAttribute);
+      }
+    }
+    return merged;
+  };
 
   try {
     // Check and update messages index
     try {
       const messagesIndex = client.index('messages');
       const settings = await messagesIndex.getSettings();
+      const updatedMessagesFilterableAttributes = mergeRequiredFilterableAttributes(
+        settings.filterableAttributes,
+        requiredMessagesFilterableAttributes,
+      );
 
-      if (!settings.filterableAttributes || !settings.filterableAttributes.includes('user')) {
-        logger.info('[indexSync] Configuring messages index to filter by user...');
+      if (
+        !Array.isArray(settings.filterableAttributes) ||
+        updatedMessagesFilterableAttributes.length !== settings.filterableAttributes.length
+      ) {
+        logger.info(
+          '[indexSync] Ensuring messages index filterable attributes include user/sender/conversationId...',
+        );
         await messagesIndex.updateSettings({
-          filterableAttributes: ['user'],
+          filterableAttributes: updatedMessagesFilterableAttributes,
         });
-        logger.info('[indexSync] Messages index configured for user filtering');
+        logger.info('[indexSync] Messages index filterable attributes updated');
         settingsUpdated = true;
       }
 
