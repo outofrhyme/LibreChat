@@ -3,7 +3,14 @@ import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
-import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
+import {
+  useMessageHelpers,
+  useLocalize,
+  useAttachments,
+  useContentMetadata,
+  useMessageActions,
+} from '~/hooks';
+import { useMessagesViewContext } from '~/Providers';
 import { cn, getHeaderPrefixForScreenReader, getMessageAriaLabel } from '~/utils';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import ContentParts from './Content/ContentParts';
@@ -41,6 +48,39 @@ export default function Message(props: TMessageProps) {
   const fontSize = useAtomValue(fontSizeAtom);
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const { children, messageId = null, isCreatedByUser } = message ?? {};
+  const { latestMessageDepth, setLatestMessage, regenerate } = useMessagesViewContext();
+  const chatContext = useMemo(
+    () => ({
+      ask,
+      index,
+      regenerate,
+      setLatestMessage,
+      conversation,
+      latestMessageId,
+      latestMessageDepth,
+      handleContinue,
+      get isSubmitting() {
+        return isSubmitting;
+      },
+    }),
+    [
+      index,
+      regenerate,
+      setLatestMessage,
+      conversation,
+      latestMessageId,
+      latestMessageDepth,
+      handleContinue,
+      isSubmitting,
+    ],
+  );
+  const { deleteMessage } = useMessageActions({
+    message,
+    searchResults,
+    currentEditId,
+    setCurrentEditId,
+    chatContext,
+  });
 
   const name = useMemo(() => {
     let result = '';
@@ -167,6 +207,7 @@ export default function Message(props: TMessageProps) {
                       conversation={conversation ?? null}
                       regenerate={() => regenerateMessage()}
                       copyToClipboard={copyToClipboard}
+                      deleteMessage={deleteMessage}
                       handleContinue={handleContinue}
                       latestMessageId={latestMessageId}
                       isLast={isLast}

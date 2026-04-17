@@ -23,6 +23,7 @@ const {
   getFlowStateManager,
   getMCPManager,
 } = require('~/config');
+const { getAgent } = require('~/models/Agent');
 const { findToken, createToken, updateToken, deleteTokens } = require('~/models');
 const { getGraphApiToken } = require('./GraphTokenService');
 const { reinitMCPServer } = require('./Tools/mcp');
@@ -35,6 +36,43 @@ const RECONNECT_THROTTLE_MS = 10_000;
 
 const missingToolCache = new Map();
 const MISSING_TOOL_TTL_MS = 10_000;
+const agentDisplayNameCache = new Map();
+const MAX_AGENT_DISPLAY_NAME_CACHE_SIZE = 1000;
+
+async function resolveAgentDisplayName(agentId) {
+  if (!agentId || typeof agentId !== 'string') {
+    return '';
+  }
+
+  const normalizedId = agentId.trim();
+  if (!normalizedId) {
+    return '';
+  }
+
+  const cachedName = agentDisplayNameCache.get(normalizedId);
+  if (typeof cachedName === 'string' && cachedName.length > 0) {
+    return cachedName;
+  }
+
+  const resolvedAgent = await getAgent({ id: normalizedId });
+  const resolvedName =
+    resolvedAgent?.name != null && typeof resolvedAgent.name === 'string'
+      ? resolvedAgent.name.trim()
+      : '';
+
+  if (!resolvedName) {
+    return '';
+  }
+
+  if (agentDisplayNameCache.size >= MAX_AGENT_DISPLAY_NAME_CACHE_SIZE) {
+    const oldestKey = agentDisplayNameCache.keys().next().value;
+    if (oldestKey != null) {
+      agentDisplayNameCache.delete(oldestKey);
+    }
+  }
+  agentDisplayNameCache.set(normalizedId, resolvedName);
+  return resolvedName;
+}
 
 function evictStale(map, ttl) {
   if (map.size <= MAX_CACHE_SIZE) {
@@ -626,17 +664,45 @@ function createToolInstance({
 
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
+      const mcpUser = config?.configurable?.user ?? (userId ? { id: userId } : undefined);
+      const metadata = config?.metadata ?? {};
+      const configurable = config?.configurable ?? {};
+      const agentFromConfigurable =
+        configurable?.agent != null && typeof configurable.agent === 'object'
+          ? configurable.agent.name
+          : undefined;
+      const candidateAgentNames = [
+        metadata?.name,
+        agentFromConfigurable,
+        metadata?.agent_name,
+        metadata?.agentName,
+        metadata?.sender,
+      ];
+      let agentName = candidateAgentNames.find(
+        (value) => typeof value === 'string' && value.trim().length > 0,
+      );
+      if (
+        !agentName &&
+        typeof metadata?.last_agent_id === 'string' &&
+        metadata.last_agent_id.trim()
+      ) {
+        const resolvedName = await resolveAgentDisplayName(metadata.last_agent_id);
+        if (resolvedName) {
+          agentName = resolvedName;
+        }
+      }
 
       const result = await mcpManager.callTool({
         serverName,
         serverConfig: capturedServerConfig,
         toolName,
         provider,
+        agentName,
         toolArguments,
         options: {
           signal: derivedSignal,
         },
-        user: config?.configurable?.user,
+        user: mcpUser,
         requestBody: config?.configurable?.requestBody,
         customUserVars,
         flowManager,
