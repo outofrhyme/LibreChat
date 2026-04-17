@@ -99,11 +99,14 @@ describe('performSync() - syncThreshold logic', () => {
 
     // Mock MeiliSearch client responses
     mockMeiliHealth.mockResolvedValue({ status: 'available' });
-    mockMeiliIndex.mockReturnValue({
-      getSettings: jest.fn().mockResolvedValue({ filterableAttributes: ['user'] }),
+    mockMeiliIndex.mockImplementation((indexName) => ({
+      getSettings: jest.fn().mockResolvedValue({
+        filterableAttributes:
+          indexName === 'messages' ? ['user', 'sender', 'conversationId'] : ['user'],
+      }),
       updateSettings: jest.fn().mockResolvedValue({}),
       search: jest.fn().mockResolvedValue({ hits: [] }),
-    });
+    }));
 
     mockBatchResetMeiliFlags.mockResolvedValue(undefined);
   });
@@ -414,6 +417,43 @@ describe('performSync() - syncThreshold logic', () => {
       '[indexSync] Settings updated. Forcing full re-sync to reindex with new configuration...',
     );
     expect(mockLogger.info).toHaveBeenCalledWith('[indexSync] Starting convos sync (50 unindexed)');
+  });
+
+  test('upgrades messages filterable attributes from [user] to include sender and conversationId', async () => {
+    Message.getSyncProgress.mockResolvedValue({
+      totalProcessed: 100,
+      totalDocuments: 150,
+      isComplete: false,
+    });
+
+    Conversation.getSyncProgress.mockResolvedValue({
+      totalProcessed: 50,
+      totalDocuments: 50,
+      isComplete: true,
+    });
+
+    Message.syncWithMeili.mockResolvedValue(undefined);
+
+    const messagesIndex = {
+      getSettings: jest.fn().mockResolvedValue({ filterableAttributes: ['user'] }),
+      updateSettings: jest.fn().mockResolvedValue({}),
+      search: jest.fn().mockResolvedValue({ hits: [] }),
+    };
+    const convosIndex = {
+      getSettings: jest.fn().mockResolvedValue({ filterableAttributes: ['user'] }),
+      updateSettings: jest.fn().mockResolvedValue({}),
+      search: jest.fn().mockResolvedValue({ hits: [] }),
+    };
+    mockMeiliIndex.mockImplementation((indexName) =>
+      indexName === 'messages' ? messagesIndex : convosIndex,
+    );
+
+    const indexSync = require('./indexSync');
+    await indexSync();
+
+    expect(messagesIndex.updateSettings).toHaveBeenCalledWith({
+      filterableAttributes: ['user', 'sender', 'conversationId'],
+    });
   });
 
   test('triggers both message and conversation sync when settingsUpdated even if both below syncThreshold', async () => {
