@@ -6,11 +6,11 @@ fileStrategy: "local"
 summarization:
   provider: "openAI"
   model: "gpt-5.4-mini"
-  maxSummaryTokens: 700
-  reserveRatio: 0.10
-  trigger:
-    type: "remaining_tokens"
-    value: 4000
+#  maxSummaryTokens: 700
+#  reserveRatio: 0.10
+#  trigger:
+#    type: "remaining_tokens"
+#    value: 4000
   contextPruning:
     enabled: false
 
