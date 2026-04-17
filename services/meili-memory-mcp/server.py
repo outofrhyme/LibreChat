@@ -61,7 +61,6 @@ mcp = FastMCP(
             "127.0.0.1",
             "rememberwhen-production.up.railway.app",
             "*.up.railway.app",
-            ]
         ],
     ),
 )
