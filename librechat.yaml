@@ -23,7 +23,6 @@ modelSpecs:
         agent_id: "agent_k9P7Nfn7JYU4czjxT89_6"
 
 interface:
-  endpointsMenu: false
   modelSelect: true
   parameters: false
   agents:
