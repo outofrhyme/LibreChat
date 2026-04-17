@@ -482,6 +482,87 @@ describe('BaseClient', () => {
       expect(result[0].content).toEqual([{ type: 'text', text: 'Legacy summary only' }]);
       expect(result[0].tokenCount).toBe(15);
     });
+
+    it('preserves a protected recent raw tail when summary exists near the latest turn', () => {
+      const messagesWithProtectedTail = [
+        { id: '1', parentMessageId: null, role: 'user', text: 'Old user' },
+        { id: '2', parentMessageId: '1', role: 'assistant', text: 'Old assistant' },
+        {
+          id: '3',
+          parentMessageId: '2',
+          role: 'assistant',
+          text: 'Older summary anchor',
+          summary: 'Summary for older history',
+        },
+        { id: '4', parentMessageId: '3', role: 'user', text: 'Recent user 1' },
+        { id: '5', parentMessageId: '4', role: 'assistant', text: 'Recent assistant' },
+        { id: '6', parentMessageId: '5', role: 'user', text: 'Recent user 2' },
+        {
+          id: '7',
+          parentMessageId: '6',
+          role: 'assistant',
+          text: 'Latest assistant',
+          summary: 'Summary that should be skipped due to tail protection',
+        },
+        { id: '8', parentMessageId: '7', role: 'user', text: 'Current user prompt' },
+      ];
+
+      const result = TestClient.constructor.getMessagesForConversation({
+        messages: messagesWithProtectedTail,
+        parentMessageId: '8',
+        summary: true,
+      });
+
+      expect(result[0].id).toBe('3');
+      expect(result[0].role).toBe('system');
+      expect(result.map((m) => m.id)).toEqual(['3', '4', '5', '6', '7', '8']);
+      expect(result.find((m) => m.id === '7')?.role).toBe('assistant');
+    });
+
+    it('does not alter existing traversal behavior when summary mode is disabled', () => {
+      const messagesWithSummary = [
+        { id: '1', parentMessageId: null, role: 'user', text: 'Message 1' },
+        {
+          id: '2',
+          parentMessageId: '1',
+          role: 'assistant',
+          text: 'Message 2',
+          summary: 'Summary for Message 2',
+        },
+        { id: '3', parentMessageId: '2', role: 'user', text: 'Message 3' },
+      ];
+
+      const result = TestClient.constructor.getMessagesForConversation({
+        messages: messagesWithSummary,
+        parentMessageId: '3',
+        summary: false,
+      });
+
+      expect(result.map((m) => m.id)).toEqual(['1', '2', '3']);
+      expect(result[1].role).toBe('assistant');
+      expect(result[1].content).toBeUndefined();
+    });
+
+    it('falls back to preserving the last 3 non-system messages when roles are unavailable', () => {
+      const rolelessMessages = [
+        { id: '1', parentMessageId: null, text: 'Oldest' },
+        { id: '2', parentMessageId: '1', text: 'Summary anchor', summary: 'Old summary' },
+        { id: '3', parentMessageId: '2', text: 'Tail one' },
+        { id: '4', parentMessageId: '3', text: 'Tail two' },
+        { id: '5', parentMessageId: '4', text: 'Tail three', summary: 'Near-tip summary' },
+        { id: '6', parentMessageId: '5', text: 'Current prompt' },
+      ];
+
+      const result = TestClient.constructor.getMessagesForConversation({
+        messages: rolelessMessages,
+        parentMessageId: '6',
+        summary: true,
+      });
+
+      expect(result.map((m) => m.id)).toEqual(['2', '3', '4', '5', '6']);
+      expect(result[0].role).toBe('system');
+      expect(result.find((m) => m.id === '5')?.role).toBeUndefined();
+    });
   });
 
   describe('findSummaryContentBlock', () => {
@@ -1135,6 +1216,21 @@ describe('BaseClient', () => {
       expect(result.context[0]).toBe(instructions);
       expect(result.messagesToRefine).toHaveLength(2);
       expect(result.remainingContextTokens).toBe(2); // 25 - 20 - 3(assistant label)
+    });
+
+    test('under tight limits, older messages are trimmed before the recent tail', async () => {
+      TestClient.maxContextTokens = 37;
+      const messages = [
+        { role: 'user', content: 'older-1', tokenCount: 12 },
+        { role: 'assistant', content: 'older-2', tokenCount: 10 },
+        { role: 'user', content: 'tail-user', tokenCount: 6 },
+        { role: 'assistant', content: 'tail-assistant', tokenCount: 6 },
+      ];
+
+      const result = await TestClient.getMessagesWithinTokenLimit({ messages });
+
+      expect(result.context.map((m) => m.content)).toEqual(['tail-user', 'tail-assistant']);
+      expect(result.messagesToRefine.map((m) => m.content)).toEqual(['older-1', 'older-2']);
     });
   });
 
