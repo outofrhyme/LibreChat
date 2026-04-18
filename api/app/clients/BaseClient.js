@@ -893,12 +893,6 @@ class BaseClient {
     const orderedMessages = [];
     let currentMessageId = parentMessageId;
     const visitedMessageIds = new Set();
-    const protectedTail = {
-      user: 2,
-      assistant: 1,
-      nonSystem: 3,
-      skippedCurrentUser: false,
-    };
 
     while (currentMessageId) {
       if (visitedMessageIds.has(currentMessageId)) {
@@ -919,15 +913,7 @@ class BaseClient {
       let hasSummary = false;
       if (summary) {
         const summaryBlock = BaseClient.findSummaryContentBlock(message);
-        const role = BaseClient.resolveConversationRole(message);
-        const isCurrentRequestMessage = currentMessageId === parentMessageId;
-        const preserveRawMessage = BaseClient.shouldPreserveRecentRawMessage({
-          message,
-          role,
-          protectedTail,
-          isCurrentRequestMessage,
-        });
-        if (summaryBlock && !preserveRawMessage) {
+        if (summaryBlock) {
           const summaryText = BaseClient.getSummaryText(summaryBlock);
           resolved = {
             ...message,
@@ -936,7 +922,7 @@ class BaseClient {
             tokenCount: summaryBlock.tokenCount,
           };
           hasSummary = true;
-        } else if (message.summary && !preserveRawMessage) {
+        } else if (message.summary) {
           resolved = {
             ...message,
             role: 'system',
@@ -961,52 +947,6 @@ class BaseClient {
 
     orderedMessages.reverse();
     return orderedMessages;
-  }
-
-  /** Resolves conversation role only when explicitly represented on the message object. */
-  static resolveConversationRole(message) {
-    if (message?.isCreatedByUser === true || message?.role === 'user') {
-      return 'user';
-    }
-    if (message?.isCreatedByUser === false || message?.role === 'assistant') {
-      return 'assistant';
-    }
-    return null;
-  }
-
-  /** Protects a deterministic raw-message tail while traversing latest → oldest summary boundaries. */
-  static shouldPreserveRecentRawMessage({
-    message,
-    role,
-    protectedTail,
-    isCurrentRequestMessage,
-  }) {
-    const isSystemMessage = message?.role === 'system';
-    if (!role && !isSystemMessage && protectedTail.nonSystem > 0) {
-      protectedTail.nonSystem -= 1;
-      return true;
-    }
-
-    if (!role) {
-      return false;
-    }
-
-    if (isCurrentRequestMessage && role === 'user' && !protectedTail.skippedCurrentUser) {
-      protectedTail.skippedCurrentUser = true;
-      return false;
-    }
-
-    if (role === 'user' && protectedTail.user > 0) {
-      protectedTail.user -= 1;
-      return true;
-    }
-
-    if (role === 'assistant' && protectedTail.assistant > 0) {
-      protectedTail.assistant -= 1;
-      return true;
-    }
-
-    return false;
   }
 
   /**

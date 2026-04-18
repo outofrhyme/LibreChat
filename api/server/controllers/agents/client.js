@@ -60,129 +60,6 @@ const db = require('~/models');
 const loadAgent = (params) => loadAgentFn(params, { getAgent: db.getAgent, getMCPServerTools });
 
 class AgentClient extends BaseClient {
-  /**
-   * Identifies the most recent completed raw-turn tail:
-   * - preferred: last 2 user + last 1 assistant
-   * - fallback: last 3 non-system messages
-   *
-   * @param {import('@langchain/core/messages').BaseMessage[]} messages
-   * @param {number} currentPromptIndex
-   * @returns {Set<number>}
-   */
-  static getProtectedTailIndices(messages, currentPromptIndex) {
-    const protectedIndices = new Set();
-    let usersNeeded = 2;
-    let assistantsNeeded = 1;
-    let selectionMode = 'fallback';
-
-    for (let i = currentPromptIndex - 1; i >= 0; i--) {
-      const type = messages[i]?.getType?.();
-      if (type === 'human' && usersNeeded > 0) {
-        protectedIndices.add(i);
-        usersNeeded -= 1;
-        continue;
-      }
-      if (type === 'ai' && assistantsNeeded > 0) {
-        protectedIndices.add(i);
-        assistantsNeeded -= 1;
-      }
-      if (usersNeeded === 0 && assistantsNeeded === 0) {
-        break;
-      }
-    }
-
-    if (usersNeeded === 0 && assistantsNeeded === 0) {
-      selectionMode = 'preferred';
-    } else {
-      protectedIndices.clear();
-      for (let i = currentPromptIndex - 1; i >= 0 && protectedIndices.size < 3; i--) {
-        const type = messages[i]?.getType?.();
-        if (type !== 'system') {
-          protectedIndices.add(i);
-        }
-      }
-    }
-
-    if (protectedIndices.size < 2) {
-      protectedIndices.clear();
-      for (let i = currentPromptIndex - 1; i >= 0 && protectedIndices.size < 3; i--) {
-        const type = messages[i]?.getType?.();
-        if (type !== 'system') {
-          protectedIndices.add(i);
-        }
-      }
-    }
-
-    if (isEnabled(process.env.AGENT_DEBUG_LOGGING)) {
-      logger.debug('[AgentClient] Protected tail selection', {
-        selectionMode,
-        size: protectedIndices.size,
-      });
-      if (protectedIndices.size < 2) {
-        logger.warn('[AgentClient] Protected tail undersized after fallback', {
-          size: protectedIndices.size,
-        });
-      }
-    }
-
-    return protectedIndices;
-  }
-
-  /**
-   * When a prior summary exists, keep only:
-   * - system context (if present),
-   * - protected recent raw tail,
-   * - current prompt
-   * Older history is represented by `initialSummary` and should not be duplicated.
-   *
-   * @param {import('@langchain/core/messages').BaseMessage[]} messages
-   * @param {{ text?: string }} [initialSummary]
-   * @returns {{ messages: import('@langchain/core/messages').BaseMessage[], protectedIndices: Set<number>, currentPromptIndex: number }}
-   */
-  static assembleSummarizedPayload(messages, initialSummary) {
-    if (!initialSummary?.text || messages.length === 0) {
-      return { messages, protectedIndices: new Set(), currentPromptIndex: -1 };
-    }
-
-    let currentPromptIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.getType?.() === 'human') {
-        currentPromptIndex = i;
-        break;
-      }
-    }
-
-    if (currentPromptIndex < 0) {
-      return { messages, protectedIndices: new Set(), currentPromptIndex };
-    }
-
-    const protectedIndices = AgentClient.getProtectedTailIndices(messages, currentPromptIndex);
-    const keepIndices = new Set([currentPromptIndex, ...protectedIndices]);
-
-    const nextMessages = messages.filter((message, index) => {
-      const type = message?.getType?.();
-      return type === 'system' || keepIndices.has(index);
-    });
-
-    const nextProtectedIndices = new Set();
-    let nextCurrentPromptIndex = -1;
-    for (let i = 0; i < nextMessages.length; i++) {
-      const originalIndex = messages.indexOf(nextMessages[i]);
-      if (protectedIndices.has(originalIndex)) {
-        nextProtectedIndices.add(i);
-      }
-      if (originalIndex === currentPromptIndex) {
-        nextCurrentPromptIndex = i;
-      }
-    }
-
-    return {
-      messages: nextMessages,
-      protectedIndices: nextProtectedIndices,
-      currentPromptIndex: nextCurrentPromptIndex,
-    };
-  }
-
   constructor(options = {}) {
     super(null, options);
     /** The current client class
@@ -872,49 +749,10 @@ class AgentClient extends BaseClient {
         boundaryTokenAdjustment,
       } = formatAgentMessages(payload, this.indexTokenCountMap, toolSet);
 
-      const summarizedPayload = AgentClient.assembleSummarizedPayload(initialMessages, initialSummary);
-      if (summarizedPayload.messages !== initialMessages) {
-        const priorMessages = initialMessages;
-        initialMessages = summarizedPayload.messages;
-        if (indexTokenCountMap) {
-          const originalIndexByMessage = new Map(priorMessages.map((message, index) => [message, index]));
-          const remappedTokenCountMap = {};
-          for (let i = 0; i < initialMessages.length; i++) {
-            const originalIndex = originalIndexByMessage.get(initialMessages[i]);
-            if (originalIndex != null) {
-              remappedTokenCountMap[i] = indexTokenCountMap[originalIndex];
-            }
-          }
-          indexTokenCountMap = remappedTokenCountMap;
-        }
-      }
-
       if (boundaryTokenAdjustment) {
         logger.debug(
           `[AgentClient] Boundary token adjustment: ${boundaryTokenAdjustment.original} → ${boundaryTokenAdjustment.adjusted} (${boundaryTokenAdjustment.remainingChars}/${boundaryTokenAdjustment.totalChars} chars)`,
         );
-      }
-      if (isEnabled(process.env.AGENT_DEBUG_LOGGING)) {
-        const logLines = initialMessages.map((message, index) => {
-          const type = message?.getType?.() ?? 'unknown';
-          const role = type === 'human' ? 'user' : type === 'ai' ? 'assistant' : type;
-          const content = getBufferString([message])?.slice(0, 80) ?? '';
-          const isCurrentPrompt = index === summarizedPayload.currentPromptIndex;
-          const isProtected = summarizedPayload.protectedIndices.has(index);
-          const isSummary = role === 'system' && content.toLowerCase().includes('summary');
-          const flags = [
-            isSummary ? 'summary' : null,
-            isProtected ? 'protected_tail' : null,
-            isCurrentPrompt ? 'current_prompt' : null,
-          ]
-            .filter(Boolean)
-            .join(',');
-          return `${index}:${role}:${flags || 'older'}:${content}`;
-        });
-        logger.debug('[AgentClient] Final outbound message candidates', {
-          count: initialMessages.length,
-          lines: logLines,
-        });
       }
       if (indexTokenCountMap && isEnabled(process.env.AGENT_DEBUG_LOGGING)) {
         const entries = Object.entries(indexTokenCountMap);
