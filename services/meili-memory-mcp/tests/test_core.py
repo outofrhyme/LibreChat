@@ -35,14 +35,14 @@ def test_collect_sender_variants_for_agent_case_insensitive():
 
 
 def test_build_search_filter_always_contains_user():
-    value = build_search_filter("user-123", [], None)
+    value = build_search_filter("user-123", [], "", None)
     assert value == "user = 'user-123'"
 
 
 def test_build_search_filter_with_sender_and_conversation():
-    value = build_search_filter("user-123", ["Nolan", "Nolan (5.4)"], "conv-1")
+    value = build_search_filter("user-123", ["Nolan", "Nolan (5.4)"], "Nolan", "conv-1")
     assert "user = 'user-123'" in value
-    assert "(sender = 'Nolan' OR sender = 'Nolan (5.4)')" in value
+    assert "((sender = 'Nolan' OR sender = 'Nolan (5.4)') OR agent_scope = 'Nolan')" in value
     assert "conversationId = 'conv-1'" in value
 
 
@@ -147,6 +147,7 @@ def test_search_memory_uses_non_empty_text_field():
             "messageId": "m1",
             "conversationId": "c1",
             "sender": "assistant",
+            "role": "assistant",
             "text": "hello from text",
         },
     ]
@@ -154,6 +155,7 @@ def test_search_memory_uses_non_empty_text_field():
         "messageId",
         "conversationId",
         "sender",
+        "agent_scope",
         "text",
         "content",
     ]
@@ -196,3 +198,32 @@ def test_search_memory_returns_empty_text_when_text_and_content_missing():
     records = service.search_memory(query="hello", user_id="user-1", agent_display_name=None)
 
     assert records[0]["text"] == ""
+
+
+def test_search_memory_supports_agent_scope_for_user_messages():
+    index = FakeIndex(
+        [
+            {
+                "messageId": "m4",
+                "conversationId": "c4",
+                "sender": "User",
+                "agent_scope": "Nolan",
+                "text": "what did I ask before?",
+            },
+            {
+                "messageId": "m5",
+                "conversationId": "c5",
+                "sender": "Nolan (5.4)",
+                "agent_scope": "Nolan",
+                "text": "you asked for a summary",
+            },
+        ],
+    )
+    service = MemorySearchService(client=FakeClient(index), index_name="messages")
+
+    records = service.search_memory(query="ask", user_id="user-1", agent_display_name="Nolan (5.4)")
+
+    assert records[0]["role"] == "user"
+    assert records[1]["role"] == "assistant"
+    query_filter = index.search_calls[-1][1]["filter"]
+    assert "agent_scope = 'Nolan'" in query_filter

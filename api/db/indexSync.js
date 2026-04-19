@@ -89,7 +89,13 @@ async function deleteDocumentsWithoutUserField(index, indexName) {
 async function ensureFilterableAttributes(client) {
   let settingsUpdated = false;
   let hasOrphanedDocs = false;
-  const requiredMessagesFilterableAttributes = ['user', 'sender', 'conversationId'];
+  const requiredMessagesFilterableAttributes = [
+    'user',
+    'sender',
+    'conversationId',
+    'agent_scope',
+    'agent_id',
+  ];
 
   const mergeRequiredFilterableAttributes = (currentAttributes, requiredAttributes) => {
     const existing = Array.isArray(currentAttributes) ? currentAttributes : [];
@@ -117,7 +123,7 @@ async function ensureFilterableAttributes(client) {
         updatedMessagesFilterableAttributes.length !== settings.filterableAttributes.length
       ) {
         logger.info(
-          '[indexSync] Ensuring messages index filterable attributes include user/sender/conversationId...',
+          '[indexSync] Ensuring messages index filterable attributes include user/sender/conversationId/agent_scope/agent_id...',
         );
         await messagesIndex.updateSettings({
           filterableAttributes: updatedMessagesFilterableAttributes,
