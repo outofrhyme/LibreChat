@@ -43,11 +43,14 @@ Behavior:
 1. Build facet query: `q: ""`, filter `user = '<trusted-user-id>'`, `facets: ["sender"]`, `limit: 0`.
 2. Normalize agent display name by stripping one trailing parenthetical (`Nolan (5.4)` -> `Nolan`).
 3. Dynamically match sender facet keys containing normalized agent name (case-insensitive).
-4. Execute real Meili search on `text` with filter:
+4. Apply heuristic group filter using:
+   - sender variants discovered in step 3
+   - indexed `agent_scope` values matching normalized agent name
+5. Execute real Meili search on `text` with filter:
    - always `user = '<trusted-user-id>'`
-   - optional sender OR-list using exact sender strings from facet discovery
+   - optional grouped scope OR-list (sender variants and/or `agent_scope`)
    - optional `conversationId`
-5. Return only `messageId`, `conversationId`, `sender`, `text`.
+6. Return `messageId`, `conversationId`, `sender`, `role`, `text`.
 
 ## Run
 

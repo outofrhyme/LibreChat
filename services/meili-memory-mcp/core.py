@@ -188,6 +188,14 @@ def build_sender_filter(sender_values: list[str]) -> str | None:
     return "(" + " OR ".join(fragments) + ")"
 
 
+def build_agent_scope_filter(agent_scope: str) -> str | None:
+    normalized_scope = normalize_agent_display_name(agent_scope)
+    if not normalized_scope:
+        return None
+    escaped_scope = normalized_scope.replace("'", "\\'")
+    return f"agent_scope = '{escaped_scope}'"
+
+
 def build_conversation_filter(conversation_id: str | None) -> str | None:
     if not conversation_id:
         return None
@@ -217,12 +225,25 @@ def collect_sender_variants_for_agent(
     return matches
 
 
-def build_search_filter(user_id: str, sender_values: list[str], conversation_id: str | None) -> str:
+def build_search_filter(
+    user_id: str,
+    sender_values: list[str],
+    agent_scope: str,
+    conversation_id: str | None,
+) -> str:
     filters: list[str] = [build_user_filter(user_id)]
 
+    scope_clauses: list[str] = []
     sender_filter = build_sender_filter(sender_values)
     if sender_filter:
-        filters.append(sender_filter)
+        scope_clauses.append(sender_filter)
+
+    agent_scope_filter = build_agent_scope_filter(agent_scope)
+    if agent_scope_filter:
+        scope_clauses.append(agent_scope_filter)
+
+    if scope_clauses:
+        filters.append("(" + " OR ".join(scope_clauses) + ")")
 
     conversation_filter = build_conversation_filter(conversation_id)
     if conversation_filter:

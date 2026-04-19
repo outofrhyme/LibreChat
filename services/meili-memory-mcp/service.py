@@ -18,6 +18,7 @@ class MemorySearchResult(TypedDict):
     messageId: str
     conversationId: str
     sender: str
+    role: str
     text: str
 
 
@@ -58,7 +59,7 @@ class MemorySearchService:
         facet_result = self._index().search(
             "",
             {
-                "filter": build_search_filter(user_id, [], None),
+                "filter": build_search_filter(user_id, [], "", None),
                 "facets": ["sender"],
                 "limit": 0,
             },
@@ -82,6 +83,7 @@ class MemorySearchService:
         filters = build_search_filter(
             user_id=user_id,
             sender_values=sender_variants,
+            agent_scope=normalized_agent_name,
             conversation_id=parsed.conversation_id,
         )
 
@@ -90,7 +92,14 @@ class MemorySearchService:
             {
                 "filter": filters,
                 "limit": parsed.limit,
-                "attributesToRetrieve": ["messageId", "conversationId", "sender", "text", "content"],
+                "attributesToRetrieve": [
+                    "messageId",
+                    "conversationId",
+                    "sender",
+                    "agent_scope",
+                    "text",
+                    "content",
+                ],
             },
         )
 
@@ -107,6 +116,7 @@ class MemorySearchService:
                     "messageId": str(hit.get("messageId", "")),
                     "conversationId": str(hit.get("conversationId", "")),
                     "sender": str(hit.get("sender", "")),
+                    "role": self._extract_role(hit),
                     "text": self._extract_text(hit),
                 },
             )
@@ -135,6 +145,13 @@ class MemorySearchService:
                     return trimmed_content_text
 
         return ""
+
+    @staticmethod
+    def _extract_role(hit: dict[str, Any]) -> str:
+        sender = hit.get("sender")
+        if isinstance(sender, str) and sender.strip().lower() == "user":
+            return "user"
+        return "assistant"
 
 
 def create_search_service() -> MemorySearchService:

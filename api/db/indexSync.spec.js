@@ -102,7 +102,9 @@ describe('performSync() - syncThreshold logic', () => {
     mockMeiliIndex.mockImplementation((indexName) => ({
       getSettings: jest.fn().mockResolvedValue({
         filterableAttributes:
-          indexName === 'messages' ? ['user', 'sender', 'conversationId'] : ['user'],
+          indexName === 'messages'
+            ? ['user', 'sender', 'conversationId', 'agent_scope', 'agent_id']
+            : ['user'],
       }),
       updateSettings: jest.fn().mockResolvedValue({}),
       search: jest.fn().mockResolvedValue({ hits: [] }),
@@ -452,7 +454,7 @@ describe('performSync() - syncThreshold logic', () => {
     await indexSync();
 
     expect(messagesIndex.updateSettings).toHaveBeenCalledWith({
-      filterableAttributes: ['user', 'sender', 'conversationId'],
+      filterableAttributes: ['user', 'sender', 'conversationId', 'agent_scope', 'agent_id'],
     });
   });
 
