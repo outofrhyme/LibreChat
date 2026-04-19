@@ -2243,6 +2243,29 @@ describe('normalizeJsonSchema', () => {
     expect(result.properties.travelMode).not.toHaveProperty('x-google-enum-descriptions');
   });
 
+  it('should remove title metadata while preserving canonical property keys and descriptions', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        query: {
+          title: 'Query',
+          type: 'string',
+          description: 'The search query',
+        },
+      },
+      required: ['query'],
+    } as any;
+
+    const result = normalizeJsonSchema(schema);
+
+    expect(result.properties.query).toEqual({
+      type: 'string',
+      description: 'The search query',
+    });
+    expect(result.properties.query).not.toHaveProperty('title');
+    expect(result.required).toEqual(['query']);
+  });
+
   it('should strip x-* fields at all nesting levels', () => {
     const schema = {
       type: 'object',

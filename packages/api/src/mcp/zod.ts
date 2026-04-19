@@ -253,6 +253,7 @@ export function resolveJsonSchemaRefs<T extends Record<string, unknown>>(
  *
  * Transformations applied:
  * - Converts `const` values to `enum` arrays (Gemini/Vertex AI rejects `const`)
+ * - Strips `title` fields to avoid misleading argument aliases in tool schemas
  * - Strips vendor extension fields (`x-*` prefixed keys, e.g. `x-google-enum-descriptions`)
  * - Strips leftover `$defs`/`definitions` blocks that may survive ref resolution
  *
@@ -282,6 +283,10 @@ export function normalizeJsonSchema<T extends Record<string, unknown>>(schema: T
     // Strip leftover $defs/definitions (should already be resolved by resolveJsonSchemaRefs,
     // but strip as a safety net for schemas that bypass ref resolution).
     if (key === '$defs' || key === 'definitions') {
+      continue;
+    }
+
+    if (key === 'title') {
       continue;
     }
 

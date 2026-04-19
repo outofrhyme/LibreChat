@@ -86,7 +86,6 @@ def _apply_runtime_settings(host: str, port: int, path: str) -> None:
 @mcp.tool()
 def search_memory(
     query: str | None = None,
-    Query: str | None = None,
     limit: int = 8,
     conversationId: str | None = None,
     ctx: Context | None = None,
@@ -94,9 +93,8 @@ def search_memory(
     """Search Meilisearch memory by query, always locked to trusted LibreChat user context."""
     headers = extract_headers_from_context(ctx)
     caller = parse_caller_context(headers)
-    effective_query = query if isinstance(query, str) and query.strip() else Query
     return MEMORY_SEARCH_SERVICE.search_memory(
-        query=effective_query or "",
+        query=query or "",
         user_id=caller.user_id,
         agent_display_name=caller.agent_display_name,
         limit=limit,
