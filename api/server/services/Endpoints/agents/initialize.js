@@ -95,6 +95,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
     throw new Error('Endpoint option not provided');
   }
   const appConfig = req.config;
+  const perf = req.perfTracker;
 
   /** @type {string | null} */
   const streamId = req._resumableStreamId || null;
@@ -155,6 +156,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
     toolEndCallback,
     collectedUsage,
     streamId,
+    perf,
   });
 
   if (!endpointOption.agent) {
@@ -162,12 +164,14 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
   }
 
   const primaryAgent = await endpointOption.agent;
+  perf?.mark('agent.primary_resolved', { primaryAgentId: primaryAgent?.id });
   delete endpointOption.agent;
   if (!primaryAgent) {
     throw new Error('Agent not found');
   }
 
   const modelsConfig = await getModelsConfig(req);
+  perf?.mark('agent.models_config_loaded');
   const validationResult = await validateAgentModel({
     req,
     res,
@@ -179,6 +183,7 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
   if (!validationResult.isValid) {
     throw new Error(validationResult.error?.message);
   }
+  perf?.mark('agent.primary_validated', { primaryAgentId: primaryAgent.id });
 
   const agentConfigs = new Map();
   const allowedProviders = new Set(appConfig?.endpoints?.[EModelEndpoint.agents]?.allowedProviders);
@@ -218,6 +223,11 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
       filterFilesByAgentAccess,
     },
   );
+  perf?.mark('agent.primary_initialized', {
+    primaryAgentId: primaryConfig.id,
+    toolDefinitions: primaryConfig.toolDefinitions?.length ?? 0,
+    edges: primaryConfig.edges?.length ?? 0,
+  });
 
   logger.debug(
     `[initializeClient] Storing tool context for ${primaryConfig.id}: ${primaryConfig.toolDefinitions?.length ?? 0} tools, registry size: ${primaryConfig.toolRegistry?.size ?? '0'}`,
@@ -336,6 +346,11 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
     agentsToProcess.delete(agentId);
     try {
       const agent = await processAgent(agentId);
+      perf?.mark('agent.handoff_initialized', {
+        agentId,
+        hasAgent: !!agent,
+        queuedAgents: agentsToProcess.size,
+      });
       if (agent?.edges?.length) {
         collectEdges(agent.edges);
       }
@@ -380,6 +395,10 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
     parentMessageId,
     allowedProviders,
     primaryAgentId: primaryConfig.id,
+  });
+  perf?.mark('agent.added_convo_processed', {
+    hadUpdatedAuthMap: !!updatedMCPAuthMap,
+    agentConfigs: agentConfigs.size,
   });
 
   if (updatedMCPAuthMap) {
@@ -452,6 +471,11 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
     resendFiles: primaryConfig.resendFiles ?? true,
     maxContextTokens: primaryConfig.maxContextTokens,
     endpoint: isEphemeralAgentId(primaryConfig.id) ? primaryConfig.endpoint : EModelEndpoint.agents,
+  });
+  perf?.mark('agent.client_created', {
+    sender,
+    agentConfigCount: agentConfigs.size,
+    streamId,
   });
 
   if (streamId) {

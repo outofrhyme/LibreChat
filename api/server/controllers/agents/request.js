@@ -14,6 +14,7 @@ const { handleAbortError } = require('~/server/middleware');
 const { logViolation } = require('~/cache');
 const { saveMessage } = require('~/models');
 const { prependMessageTimestamp } = require('./messageTimestamp');
+const { createPerfTracker } = require('~/server/utils/perf');
 
 function createCloseHandler(abortController) {
   return function (manual) {
@@ -53,8 +54,22 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
   const userId = req.user.id;
   const text = prependMessageTimestamp(originalText, clientTimezone);
+  const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const perf = createPerfTracker({
+    runId,
+    userId,
+    conversationId: reqConversationId ?? null,
+    endpoint: endpointOption?.endpoint ?? null,
+  });
+  req.perfTracker = perf;
+  perf.mark('request.received', {
+    isNewConversation: !reqConversationId || reqConversationId === 'new',
+    isRegenerate: !!isRegenerate,
+    isContinued: !!isContinued,
+  });
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
+  perf.mark('request.pending_checked', { allowed, pendingRequests, limit });
   if (!allowed) {
     const violationInfo = getViolationInfo(pendingRequests, limit);
     await logViolation(req, res, ViolationTypes.CONCURRENT, violationInfo, violationInfo.score);
@@ -65,6 +80,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
   // Treat "new" as a placeholder that needs a real UUID (frontend may send "new" for new convos)
   const conversationId =
     !reqConversationId || reqConversationId === 'new' ? crypto.randomUUID() : reqConversationId;
+  perf.mark('request.conversation_resolved', { conversationId, reqConversationId });
   const streamId = conversationId;
 
   let client = null;
@@ -78,12 +94,14 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     });
 
     const job = await GenerationJobManager.createJob(streamId, userId, conversationId);
+    perf.mark('request.job_created', { streamId });
     const jobCreatedAt = job.createdAt; // Capture creation time to detect job replacement
     req._resumableStreamId = streamId;
 
     // Send JSON response IMMEDIATELY so client can connect to SSE stream
     // This is critical: tool loading (MCP OAuth) may emit events that the client needs to receive
     res.json({ streamId, conversationId, status: 'started' });
+    perf.mark('request.handshake_sent', { streamId });
 
     // Note: We no longer use res.on('close') to abort since we send JSON immediately.
     // The response closes normally after res.json(), which is not an abort condition.
@@ -161,6 +179,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
       endpointOption,
       // Use the job's abort controller signal - allows abort via GenerationJobManager.abortJob()
       signal: job.abortController.signal,
+    });
+    perf.mark('request.client_initialized', {
+      streamId,
+      hasClient: !!result?.client,
     });
 
     if (job.abortController.signal.aborted) {
@@ -248,6 +270,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         };
 
         const response = await client.sendMessage(text, messageOptions);
+        perf.mark('request.send_message_resolved', {
+          streamId,
+          responseMessageId: response?.messageId,
+        });
 
         const messageId = response.messageId;
         const endpoint = endpointOption.endpoint;
@@ -337,6 +363,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           });
 
           await GenerationJobManager.emitDone(streamId, finalEvent);
+          perf.mark('request.final_event_emitted', { streamId, aborted: false });
           GenerationJobManager.completeJob(streamId);
           await decrementPendingRequest(userId);
         } else {
@@ -357,9 +384,12 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           });
 
           await GenerationJobManager.emitDone(streamId, finalEvent);
+          perf.mark('request.final_event_emitted', { streamId, aborted: true });
           GenerationJobManager.completeJob(streamId, 'Request aborted');
           await decrementPendingRequest(userId);
         }
+        perf.mark('request.complete', { streamId });
+        perf.summary({ streamId, aborted: wasAbortedBeforeComplete });
 
         if (shouldGenerateTitle) {
           addTitle(req, {
@@ -411,6 +441,8 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
       );
       GenerationJobManager.completeJob(streamId, err.message);
       await decrementPendingRequest(userId);
+      perf.mark('request.background_error', { streamId, error: err.message });
+      perf.summary({ streamId, backgroundError: true });
     });
   } catch (error) {
     logger.error('[ResumableAgentController] Initialization error:', error);
@@ -422,6 +454,8 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     }
     GenerationJobManager.completeJob(streamId, error.message);
     await decrementPendingRequest(userId);
+    perf.mark('request.initialization_error', { streamId, error: error.message });
+    perf.summary({ streamId, initError: true });
     if (client) {
       disposeClient(client);
     }

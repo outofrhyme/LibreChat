@@ -7,6 +7,7 @@ import { useScreenshot, useMessageScrolling, useLocalize } from '~/hooks';
 import ScrollToBottom from '~/components/Messages/ScrollToBottom';
 import { MessagesViewProvider } from '~/Providers';
 import { fontSizeAtom } from '~/store/fontSize';
+import { logPerf } from '~/utils/perf';
 import MultiMessage from './MultiMessage';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -33,6 +34,17 @@ function MessagesViewContent({
   } = useMessageScrolling(_messagesTree);
 
   const { conversationId } = conversation ?? {};
+  const rootCount = _messagesTree?.length ?? 0;
+  const malformedRoots =
+    _messagesTree?.filter(
+      (message) => !message || typeof message !== 'object' || !message.messageId,
+    ).length ?? 0;
+
+  logPerf('mobile.messages_tree_snapshot', {
+    conversationId,
+    rootCount,
+    malformedRoots,
+  });
 
   return (
     <>

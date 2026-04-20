@@ -96,6 +96,9 @@ const searchEnabled = process.env.SEARCH != null && process.env.SEARCH.toLowerCa
  */
 const meiliEnabled =
   process.env.MEILI_HOST != null && process.env.MEILI_MASTER_KEY != null && searchEnabled;
+const meiliPerfEnabled =
+  process.env.LIBRECHAT_MEILI_PERF_DEBUG === 'true' ||
+  process.env.LIBRECHAT_MEILI_PERF_DEBUG === '1';
 
 /**
  * Get sync configuration from environment variables
@@ -104,6 +107,14 @@ const getSyncConfig = () => ({
   batchSize: parseInt(process.env.MEILI_SYNC_BATCH_SIZE || '100', 10),
   delayMs: parseInt(process.env.MEILI_SYNC_DELAY_MS || '100', 10),
 });
+
+const estimateObjectSizeBytes = (payload: Record<string, unknown>): number => {
+  try {
+    return Buffer.byteLength(JSON.stringify(payload), 'utf8');
+  } catch (_error) {
+    return 0;
+  }
+};
 
 /**
  * Validates the required options for configuring the mongoMeili plugin.
@@ -212,14 +223,19 @@ const createMeiliMongooseModel = ({
       ...new Set(
         conversationDocs
           .map((conversation) => conversation.agent_id)
-          .filter((agentId): agentId is string => typeof agentId === 'string' && agentId.length > 0),
+          .filter(
+            (agentId): agentId is string => typeof agentId === 'string' && agentId.length > 0,
+          ),
       ),
     ];
 
     const agentNameMap = new Map<string, string>();
     const agentModel = getAgentModel();
     if (agentModel && uniqueAgentIds.length > 0) {
-      const agentDocs = await agentModel.find({ id: { $in: uniqueAgentIds } }).select('id name').lean();
+      const agentDocs = await agentModel
+        .find({ id: { $in: uniqueAgentIds } })
+        .select('id name')
+        .lean();
       for (const agentDoc of agentDocs) {
         if (!agentDoc.id) {
           continue;
@@ -234,9 +250,7 @@ const createMeiliMongooseModel = ({
       }
 
       const agentId = conversation.agent_id;
-      const derivedScope = normalizeAgentScope(
-        (agentId && agentNameMap.get(agentId)) || undefined,
-      );
+      const derivedScope = normalizeAgentScope((agentId && agentNameMap.get(agentId)) || undefined);
 
       conversationMap.set(conversation.conversationId, {
         agentId,
@@ -399,8 +413,23 @@ const createMeiliMongooseModel = ({
       });
 
       try {
+        const addStart = Date.now();
         // Add documents to MeiliSearch
         await index.addDocumentsInBatches(formattedDocs, undefined, { primaryKey });
+        if (meiliPerfEnabled) {
+          const totalPayloadBytes = formattedDocs.reduce(
+            (acc, doc) => acc + estimateObjectSizeBytes(doc),
+            0,
+          );
+          logger.info('[perf] meili.sync_batch_indexed', {
+            index: index.uid,
+            collection: primaryKey,
+            batchSize: formattedDocs.length,
+            totalPayloadBytes,
+            avgPayloadBytes: Math.round(totalPayloadBytes / formattedDocs.length),
+            meiliAddDurationMs: Date.now() - addStart,
+          });
+        }
 
         // Update MongoDB to mark documents as indexed.
         // { timestamps: false } prevents Mongoose from touching updatedAt, preserving
@@ -553,6 +582,19 @@ const createMeiliMongooseModel = ({
         }
       }
 
+      if (meiliPerfEnabled) {
+        logger.info('[perf] meili.document_prepared', {
+          index: index.uid,
+          primaryKey,
+          objectKeyCount: Object.keys(object).length,
+          payloadBytes: estimateObjectSizeBytes(object),
+          hasContent: Array.isArray((this.toJSON() as Record<string, unknown>).content),
+          hasText: typeof object.text === 'string',
+          hasAgentId: typeof object.agent_id === 'string',
+          hasAgentScope: typeof object.agent_scope === 'string',
+        });
+      }
+
       return object;
     }
 
@@ -570,15 +612,30 @@ const createMeiliMongooseModel = ({
 
       const object = this.preprocessObjectForIndex!();
       if (isMessageIndex && typeof object.conversationId === 'string') {
-        const conversationScopeMap = await resolveConversationScopeMetadata([object.conversationId]);
-        applyMessageScopeMetadata(this.toJSON() as Record<string, unknown>, object, conversationScopeMap);
+        const conversationScopeMap = await resolveConversationScopeMetadata([
+          object.conversationId,
+        ]);
+        applyMessageScopeMetadata(
+          this.toJSON() as Record<string, unknown>,
+          object,
+          conversationScopeMap,
+        );
       }
       const maxRetries = 3;
       let retryCount = 0;
 
       while (retryCount < maxRetries) {
         try {
+          const addStart = Date.now();
           await index.addDocuments([object], { primaryKey });
+          if (meiliPerfEnabled) {
+            logger.info('[perf] meili.document_added', {
+              index: index.uid,
+              primaryKey,
+              payloadBytes: estimateObjectSizeBytes(object),
+              durationMs: Date.now() - addStart,
+            });
+          }
           break;
         } catch (error) {
           retryCount++;
@@ -615,14 +672,25 @@ const createMeiliMongooseModel = ({
       try {
         const object = this.preprocessObjectForIndex!();
         if (isMessageIndex && typeof object.conversationId === 'string') {
-          const conversationScopeMap = await resolveConversationScopeMetadata([object.conversationId]);
+          const conversationScopeMap = await resolveConversationScopeMetadata([
+            object.conversationId,
+          ]);
           applyMessageScopeMetadata(
             this.toJSON() as Record<string, unknown>,
             object,
             conversationScopeMap,
           );
         }
+        const updateStart = Date.now();
         await index.updateDocuments([object], { primaryKey });
+        if (meiliPerfEnabled) {
+          logger.info('[perf] meili.document_updated', {
+            index: index.uid,
+            primaryKey,
+            payloadBytes: estimateObjectSizeBytes(object),
+            durationMs: Date.now() - updateStart,
+          });
+        }
         next();
       } catch (error) {
         logger.error('[updateObjectToMeili] Error updating document in Meili:', error);
