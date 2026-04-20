@@ -142,12 +142,39 @@ function getDefaultHandlers({
   streamId = null,
   toolExecuteOptions = null,
   summarizationOptions = null,
+  perf = null,
 }) {
   if (!res || !aggregateContent) {
     throw new Error(
       `[getDefaultHandlers] Missing required options: res: ${!res}, aggregateContent: ${!aggregateContent}`,
     );
   }
+  let forwardedChunks = 0;
+  let firstToolCallMarked = false;
+  let firstModelCallMarked = false;
+  let firstTokenMarked = false;
+
+  const trackChunkForward = async (event, data, metadata) => {
+    const emitStart = perf?.now?.();
+    await emitEvent(res, streamId, { event, data });
+    forwardedChunks += 1;
+    if (firstTokenMarked === false && event === GraphEvents.ON_MESSAGE_DELTA) {
+      firstTokenMarked = true;
+      perf?.mark('stream.first_token_forwarded', {
+        runId: metadata?.run_id,
+        streamId,
+      });
+    }
+    if (perf?.enabled && emitStart != null && forwardedChunks % 50 === 0) {
+      const elapsedMs = perf.now() - emitStart;
+      perf.mark('stream.chunk_forwarded', {
+        event,
+        forwardedChunks,
+        elapsedMs,
+      });
+    }
+  };
+
   const handlers = {
     [GraphEvents.CHAT_MODEL_END]: new ModelEndHandler(collectedUsage),
     [GraphEvents.TOOL_END]: new ToolEndHandler(toolEndCallback, logger),
@@ -161,11 +188,18 @@ function getDefaultHandlers({
       handle: async (event, data, metadata) => {
         aggregateContent({ event, data });
         if (data?.stepDetails.type === StepTypes.TOOL_CALLS) {
-          await emitEvent(res, streamId, { event, data });
+          if (firstToolCallMarked === false) {
+            firstToolCallMarked = true;
+            perf?.mark('tool.first_call_start', {
+              runId: metadata?.run_id,
+              streamId,
+            });
+          }
+          await trackChunkForward(event, data, metadata);
         } else if (checkIfLastAgent(metadata?.last_agent_id, metadata?.langgraph_node)) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (!metadata?.hide_sequential_outputs) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else {
           const agentName = metadata?.name ?? 'Agent';
           const isToolCall = data?.stepDetails.type === StepTypes.TOOL_CALLS;
@@ -190,11 +224,18 @@ function getDefaultHandlers({
       handle: async (event, data, metadata) => {
         aggregateContent({ event, data });
         if (data?.delta.type === StepTypes.TOOL_CALLS) {
-          await emitEvent(res, streamId, { event, data });
+          if (firstToolCallMarked === false) {
+            firstToolCallMarked = true;
+            perf?.mark('tool.first_call_start', {
+              runId: metadata?.run_id,
+              streamId,
+            });
+          }
+          await trackChunkForward(event, data, metadata);
         } else if (checkIfLastAgent(metadata?.last_agent_id, metadata?.langgraph_node)) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (!metadata?.hide_sequential_outputs) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         }
       },
     },
@@ -208,11 +249,11 @@ function getDefaultHandlers({
       handle: async (event, data, metadata) => {
         aggregateContent({ event, data });
         if (data?.result != null) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (checkIfLastAgent(metadata?.last_agent_id, metadata?.langgraph_node)) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (!metadata?.hide_sequential_outputs) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         }
       },
     },
@@ -225,10 +266,17 @@ function getDefaultHandlers({
        */
       handle: async (event, data, metadata) => {
         aggregateContent({ event, data });
+        if (firstModelCallMarked === false) {
+          firstModelCallMarked = true;
+          perf?.mark('model.first_call_start', {
+            runId: metadata?.run_id,
+            streamId,
+          });
+        }
         if (checkIfLastAgent(metadata?.last_agent_id, metadata?.langgraph_node)) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (!metadata?.hide_sequential_outputs) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         }
       },
     },
@@ -242,9 +290,9 @@ function getDefaultHandlers({
       handle: async (event, data, metadata) => {
         aggregateContent({ event, data });
         if (checkIfLastAgent(metadata?.last_agent_id, metadata?.langgraph_node)) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         } else if (!metadata?.hide_sequential_outputs) {
-          await emitEvent(res, streamId, { event, data });
+          await trackChunkForward(event, data, metadata);
         }
       },
     },

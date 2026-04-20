@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TMessage } from 'librechat-data-provider';
 import { useMessagesConversation, useMessagesSubmission } from '~/Providers';
 import useScrollToRef from '~/hooks/useScrollToRef';
+import { logPerf } from '~/utils/perf';
 import store from '~/store';
 
 const threshold = 0.85;
@@ -19,6 +20,7 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
   const { setAbortScroll, isSubmitting, abortScroll } = useMessagesSubmission();
 
   const timeoutIdRef = useRef<NodeJS.Timeout>();
+  const observerCreateCount = useRef(0);
 
   const debouncedSetShowScrollButton = useCallback((value: boolean) => {
     clearTimeout(timeoutIdRef.current);
@@ -34,10 +36,24 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
 
     const observer = new IntersectionObserver(
       ([entry]) => {
+        const callbackStart = performance.now();
         debouncedSetShowScrollButton(!entry.isIntersecting);
+        const callbackDuration = performance.now() - callbackStart;
+        if (callbackDuration > 8) {
+          logPerf('mobile.scroll.observer_callback_slow', {
+            callbackDuration,
+            conversationId,
+          });
+        }
       },
       { root: scrollableRef.current, threshold },
     );
+    observerCreateCount.current += 1;
+    logPerf('mobile.scroll.observer_created', {
+      observerCreateCount: observerCreateCount.current,
+      reason: 'effect_init',
+      conversationId,
+    });
 
     observer.observe(messagesEndRef.current);
 
@@ -45,7 +61,7 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
       observer.disconnect();
       clearTimeout(timeoutIdRef.current);
     };
-  }, [messagesEndRef, scrollableRef, debouncedSetShowScrollButton]);
+  }, [messagesEndRef, scrollableRef, debouncedSetShowScrollButton, conversationId]);
 
   const debouncedHandleScroll = useCallback(() => {
     if (messagesEndRef.current && scrollableRef.current) {
@@ -55,10 +71,16 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
         },
         { root: scrollableRef.current, threshold },
       );
+      observerCreateCount.current += 1;
+      logPerf('mobile.scroll.observer_created', {
+        observerCreateCount: observerCreateCount.current,
+        reason: 'scroll_handler',
+        conversationId,
+      });
       observer.observe(messagesEndRef.current);
       return () => observer.disconnect();
     }
-  }, [debouncedSetShowScrollButton]);
+  }, [debouncedSetShowScrollButton, conversationId]);
 
   const scrollCallback = () => debouncedSetShowScrollButton(false);
 

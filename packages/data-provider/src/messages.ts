@@ -16,10 +16,21 @@ export function buildTree({
   const messageMap: Record<string, ParentMessage> = {};
   const rootMessages: TMessage[] = [];
   const childrenCount: Record<string, number> = {};
+  const malformedMessages: Array<{ index: number; reason: string }> = [];
+  const orphanedParentIds = new Set<string>();
+  const isPerfDebug =
+    typeof globalThis === 'object' &&
+    globalThis != null &&
+    '__LIBRECHAT_PERF_DEBUG' in globalThis &&
+    Boolean((globalThis as { __LIBRECHAT_PERF_DEBUG?: unknown }).__LIBRECHAT_PERF_DEBUG);
 
-  messages.forEach((message) => {
+  messages.forEach((message, index) => {
     if (!message) {
+      malformedMessages.push({ index, reason: 'empty_message' });
       return;
+    }
+    if (!message.messageId) {
+      malformedMessages.push({ index, reason: 'missing_message_id' });
     }
     const parentId = message.parentMessageId ?? '';
     childrenCount[parentId] = (childrenCount[parentId] || 0) + 1;
@@ -42,9 +53,22 @@ export function buildTree({
       parentMessage.children.push(extendedMessage);
       extendedMessage.depth = parentMessage.depth + 1;
     } else {
+      if (parentId) {
+        orphanedParentIds.add(parentId);
+      }
       rootMessages.push(extendedMessage);
     }
   });
+
+  if (isPerfDebug) {
+    console.debug('[perf] tree.build', {
+      inputCount: messages.length,
+      rootCount: rootMessages.length,
+      malformedCount: malformedMessages.length,
+      orphanedParentCount: orphanedParentIds.size,
+      malformedMessages: malformedMessages.slice(0, 10),
+    });
+  }
 
   return rootMessages;
 }
