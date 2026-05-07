@@ -41,6 +41,17 @@ endpoints:
   openAI:
     enabled: true
     models:
+      default:
+        - chat-latest
+        - gpt-5.5
+        - gpt-5.5-2026-04-23
+        - gpt-5.4
+        - gpt-5.4-2026-03-05
+        - gpt-5.3-chat-latest
+        - gpt-5.2-chat-latest
+        - gpt-5.1-chat-latest
+        - gpt-4o-2024-11-20
+        - gpt-4o
       fetch: true
   anthropic:
     enabled: true
