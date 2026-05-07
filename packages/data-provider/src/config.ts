@@ -1201,6 +1201,9 @@ export const alternateName = {
 };
 
 const sharedOpenAIModels = [
+  'chat-latest',
+  'gpt-5.5',
+  'gpt-5.5-2026-04-23',
   'gpt-5.4',
   // TODO: gpt-5.4-thinking may have separate reasoning token pricing — verify before release
   'gpt-5.4-thinking',
