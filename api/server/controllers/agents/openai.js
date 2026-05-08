@@ -107,6 +107,67 @@ function convertMessages(messages) {
   });
 }
 
+function normalizeMessagePreviewContent(content) {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') {
+        return '';
+      }
+      if (part.type === 'text') {
+        return part.text ?? '';
+      }
+      if (part.type === 'image_url') {
+        return '[image_url]';
+      }
+      return `[${part.type ?? 'content_part'}]`;
+    })
+    .join('\n');
+}
+
+function logPromptCacheDebug({ formattedMessages, toolDefinitions }) {
+  if (!process.env.AGENT_DEBUG_LOGGING) {
+    return;
+  }
+
+  const orderedRoles = formattedMessages.map((message, index) => `${index}:${message.role}`);
+  logger.debug('[OpenAI API][PromptCacheDebug] ordered_roles=', orderedRoles);
+
+  for (let i = 0; i < formattedMessages.length; i++) {
+    const message = formattedMessages[i];
+    const preview = normalizeMessagePreviewContent(message.content).slice(0, 300);
+    logger.debug(
+      `[OpenAI API][PromptCacheDebug] msg[${i}] role=${message.role} preview=${JSON.stringify(preview)}`,
+    );
+  }
+
+  logger.debug(
+    '[OpenAI API][PromptCacheDebug] tool_order=',
+    toolDefinitions.map((tool) => tool.name),
+  );
+}
+
+function logUsagePromptCacheDebug(usage) {
+  if (!process.env.AGENT_DEBUG_LOGGING) {
+    return;
+  }
+
+  logger.debug('[OpenAI API][PromptCacheDebug] usage_keys=', Object.keys(usage));
+  logger.debug('[OpenAI API][PromptCacheDebug] usage_cache_fields=', {
+    prompt_tokens_details_cached_tokens: usage.prompt_tokens_details?.cached_tokens,
+    input_tokens_details_cached_tokens: usage.input_tokens_details?.cached_tokens,
+    input_token_details_cache_read: usage.input_token_details?.cache_read,
+    input_token_details_cache_creation: usage.input_token_details?.cache_creation,
+    cache_read_input_tokens: usage.cache_read_input_tokens,
+    cache_creation_input_tokens: usage.cache_creation_input_tokens,
+  });
+}
+
 /**
  * Send an error response in OpenAI format
  */
@@ -297,6 +358,11 @@ const OpenAIChatCompletionController = async (req, res) => {
       summary: initialSummary,
     } = formatAgentMessages(openaiMessages, {}, toolSet);
 
+    logPromptCacheDebug({
+      formattedMessages,
+      toolDefinitions: primaryConfig.toolDefinitions ?? [],
+    });
+
     /**
      * Create a simple handler that processes data
      */
@@ -442,6 +508,18 @@ const OpenAIChatCompletionController = async (req, res) => {
         handle: (_event, data, metadata) => {
           const usage = data?.output?.usage_metadata;
           if (usage) {
+            const cacheRead =
+              usage.input_token_details?.cache_read ?? usage.cache_read_input_tokens ?? 0;
+            const cacheCreation =
+              usage.input_token_details?.cache_creation ??
+              usage.cache_creation_input_tokens ??
+              0;
+            if (process.env.AGENT_DEBUG_LOGGING) {
+              logger.debug(
+                `[OpenAI API][PromptCacheDebug] usage input_tokens=${usage.input_tokens ?? 0} output_tokens=${usage.output_tokens ?? 0} cache_read=${cacheRead} cache_creation=${cacheCreation}`,
+              );
+              logUsagePromptCacheDebug(usage);
+            }
             const taggedUsage = markSummarizationUsage(usage, metadata);
             collectedUsage.push(taggedUsage);
             const target = isStreaming ? tracker : aggregator;
