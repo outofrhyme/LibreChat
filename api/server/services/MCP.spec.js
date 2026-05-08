@@ -68,9 +68,11 @@ jest.mock('~/cache', () => ({
 }));
 
 jest.mock('~/models', () => ({
+  getAgent: jest.fn(),
   findToken: jest.fn(),
   createToken: jest.fn(),
   updateToken: jest.fn(),
+  deleteTokens: jest.fn(),
 }));
 
 jest.mock('./Tools/mcp', () => ({
@@ -660,12 +662,14 @@ describe('tests for the new helper functions used by the MCP connection status e
 
 describe('User parameter passing tests', () => {
   let mockReinitMCPServer;
+  let mockGetMCPManager;
   let mockGetFlowStateManager;
   let mockGetLogStores;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockReinitMCPServer = require('./Tools/mcp').reinitMCPServer;
+    mockGetMCPManager = require('~/config').getMCPManager;
     mockGetFlowStateManager = require('~/config').getFlowStateManager;
     mockGetLogStores = require('~/cache').getLogStores;
 
@@ -1102,6 +1106,194 @@ describe('User parameter passing tests', () => {
       // Verify getAppConfig was called with correct roles
       expect(mockGetAppConfig).toHaveBeenNthCalledWith(1, { role: 'admin' });
       expect(mockGetAppConfig).toHaveBeenNthCalledWith(2, { role: 'user' });
+    });
+
+    it('should pass fallback user.id and agentName to mcpManager.callTool for agent tool calls', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      mockGetMCPManager.mockReturnValue({ callTool: mockCallTool });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools: {
+          [`test-tool${D}test-server`]: {
+            function: {
+              description: 'Cached tool',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        },
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        {},
+        {
+          configurable: {
+            user_id: 'agent-user-id-only',
+            requestBody: { conversationId: 'conv-1' },
+          },
+          metadata: {
+            provider: 'openai',
+            name: 'Nolan (5.4)',
+            thread_id: 'thread-1',
+            run_id: 'run-1',
+          },
+        },
+      );
+
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: { id: 'agent-user-id-only' },
+          agentName: 'Nolan (5.4)',
+        }),
+      );
+    });
+
+    it('should resolve agentName from metadata.last_agent_id via getAgent', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      const mockGetAgent = require('~/models').getAgent;
+      mockGetMCPManager.mockReturnValue({ callTool: mockCallTool });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+      mockGetAgent.mockResolvedValue({ id: 'agent-1', name: 'Nolan (5.4)' });
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools: {
+          [`test-tool${D}test-server`]: {
+            function: {
+              description: 'Cached tool',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        },
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        {},
+        {
+          configurable: { user_id: 'agent-user-id-only' },
+          metadata: {
+            provider: 'openai',
+            last_agent_id: 'agent-1',
+            thread_id: 'thread-1',
+            run_id: 'run-1',
+          },
+        },
+      );
+
+      expect(mockGetAgent).toHaveBeenCalledWith({ id: 'agent-1' });
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentName: 'Nolan (5.4)',
+        }),
+      );
+    });
+
+    it('should normalize tool argument keys case-insensitively using schema properties', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      mockGetMCPManager.mockReturnValue({ callTool: mockCallTool });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools: {
+          [`test-tool${D}test-server`]: {
+            function: {
+              description: 'Cached tool',
+              parameters: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                  query: { type: 'string' },
+                  user_id: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        {
+          Path: 'family_origin.md',
+          QUERY: 'history',
+          USER_ID: 'user-123',
+        },
+        {
+          configurable: { user_id: 'agent-user-id-only' },
+          metadata: { provider: 'openai', thread_id: 'thread-1', run_id: 'run-1' },
+        },
+      );
+
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolArguments: {
+            path: 'family_origin.md',
+            query: 'history',
+            user_id: 'user-123',
+          },
+        }),
+      );
+    });
+
+    it('should prefer canonical schema key values when duplicate variants are provided', async () => {
+      const mockRes = { write: jest.fn(), flush: jest.fn() };
+      const mockCallTool = jest.fn().mockResolvedValue('ok');
+      mockGetMCPManager.mockReturnValue({ callTool: mockCallTool });
+      mockGetFlowStateManager.mockReturnValue({});
+      mockGetLogStores.mockReturnValue({});
+
+      const toolInstance = await createMCPTool({
+        res: mockRes,
+        user: { id: 'request-user' },
+        toolKey: `test-tool${D}test-server`,
+        provider: 'openai',
+        userMCPAuthMap: {},
+        availableTools: {
+          [`test-tool${D}test-server`]: {
+            function: {
+              description: 'Cached tool',
+              parameters: { type: 'object', properties: { path: { type: 'string' } } },
+            },
+          },
+        },
+        config: { type: 'stdio', command: 'test', args: [] },
+      });
+
+      await toolInstance.func(
+        { path: 'canonical.md', Path: 'non-canonical.md' },
+        {
+          configurable: { user_id: 'agent-user-id-only' },
+          metadata: { provider: 'openai', thread_id: 'thread-1', run_id: 'run-1' },
+        },
+      );
+
+      expect(mockCallTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolArguments: { path: 'canonical.md' },
+        }),
+      );
     });
   });
 

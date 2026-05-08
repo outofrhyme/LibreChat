@@ -6,6 +6,7 @@ import { useUpdateMessageMutation } from 'librechat-data-provider/react-query';
 import type { TEditProps } from '~/common';
 import { useMessagesOperations, useMessagesConversation } from '~/Providers';
 import { useGetAddedConvo } from '~/hooks/Chat';
+import { stripMsgTimePrefixForDisplay } from '~/utils/messageText';
 import { cn, removeFocusRings } from '~/utils';
 import { useLocalize } from '~/hooks';
 import Container from './Container';
@@ -36,9 +37,13 @@ const EditMessage = ({
 
   const getAddedConvo = useGetAddedConvo();
 
+  const initialText = message.isCreatedByUser
+    ? stripMsgTimePrefixForDisplay(text ?? '', true)
+    : (text ?? '');
+
   const { register, handleSubmit, setValue } = useForm({
     defaultValues: {
-      text: text ?? '',
+      text: initialText,
     },
   });
 

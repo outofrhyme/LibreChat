@@ -290,6 +290,28 @@ describe('getOpenAIModels sorting behavior', () => {
     ];
     expect(models).toEqual(expectedOrder);
   });
+
+  it('includes bare chat-latest without broadening to other chat models', async () => {
+    mockedAxios.get.mockResolvedValue({
+      data: {
+        data: [
+          { id: 'chat-latest' },
+          { id: 'chat-preview' },
+          { id: 'chat-audio-latest' },
+          { id: 'chat-realtime-latest' },
+          { id: 'gpt-4o' },
+        ],
+      },
+    });
+
+    const models = await getOpenAIModels({ user: 'user456' });
+
+    expect(models).toContain('chat-latest');
+    expect(models).toContain('gpt-4o');
+    expect(models).not.toContain('chat-preview');
+    expect(models).not.toContain('chat-audio-latest');
+    expect(models).not.toContain('chat-realtime-latest');
+  });
 });
 
 describe('fetchModels with Ollama specific logic', () => {

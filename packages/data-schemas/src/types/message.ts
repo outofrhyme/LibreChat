@@ -15,6 +15,8 @@ export interface IMessage extends Document {
   tokenCount?: number;
   summaryTokenCount?: number;
   sender?: string;
+  agent_id?: string;
+  agent_scope?: string;
   text?: string;
   summary?: string;
   isCreatedByUser: boolean;

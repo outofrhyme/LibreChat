@@ -29,6 +29,21 @@ interface MeiliIndexable {
   _meiliIndex?: boolean;
 }
 
+interface AgentRecord {
+  id?: string;
+  name?: string;
+}
+
+interface ConversationRecord {
+  conversationId?: string;
+  agent_id?: string;
+}
+
+interface MessageScopeMetadata {
+  agentId?: string;
+  agentScope?: string;
+}
+
 interface SyncProgress {
   lastSyncedId?: string;
   totalProcessed: number;
@@ -122,6 +137,23 @@ const processBatch = async <T>(
   }
 };
 
+const USER_SENDER = 'user';
+
+const normalizeAgentScope = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  const withoutSuffix = normalized.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return withoutSuffix || undefined;
+};
+
+const isUserSender = (value: unknown): boolean =>
+  typeof value === 'string' && value.trim().toLowerCase() === USER_SENDER;
+
 /**
  * Factory function to create a MeiliMongooseModel class which extends a Mongoose model.
  * This class contains static and instance methods to synchronize and manage the MeiliSearch index
@@ -135,17 +167,104 @@ const processBatch = async <T>(
  * @returns A class definition that will be loaded into the Mongoose schema.
  */
 const createMeiliMongooseModel = ({
+  mongoose,
   index,
   attributesToIndex,
   primaryKey,
   syncOptions,
 }: {
+  mongoose: typeof import('mongoose');
   index: Index<MeiliIndexable>;
   attributesToIndex: string[];
   primaryKey: string;
   syncOptions: { batchSize: number; delayMs: number };
 }) => {
   const syncConfig = { ...getSyncConfig(), ...syncOptions };
+  const isMessageIndex = primaryKey === 'messageId';
+
+  const getAgentModel = (): Model<AgentRecord> | null =>
+    (mongoose.models.Agent as Model<AgentRecord> | undefined) ?? null;
+
+  const getConversationModel = (): Model<ConversationRecord> | null =>
+    (mongoose.models.Conversation as Model<ConversationRecord> | undefined) ?? null;
+
+  const resolveConversationScopeMetadata = async (
+    conversationIds: string[],
+  ): Promise<Map<string, MessageScopeMetadata>> => {
+    if (!isMessageIndex || conversationIds.length === 0) {
+      return new Map<string, MessageScopeMetadata>();
+    }
+
+    const conversationModel = getConversationModel();
+    if (conversationModel == null) {
+      return new Map<string, MessageScopeMetadata>();
+    }
+
+    const conversationDocs = await conversationModel
+      .find({ conversationId: { $in: conversationIds } })
+      .select('conversationId agent_id')
+      .lean();
+
+    const uniqueAgentIds = [
+      ...new Set(
+        conversationDocs
+          .map((conversation) => conversation.agent_id)
+          .filter((agentId): agentId is string => typeof agentId === 'string' && agentId.length > 0),
+      ),
+    ];
+
+    const agentNameMap = new Map<string, string>();
+    const agentModel = getAgentModel();
+    if (agentModel && uniqueAgentIds.length > 0) {
+      const agentDocs = await agentModel.find({ id: { $in: uniqueAgentIds } }).select('id name').lean();
+      for (const agentDoc of agentDocs) {
+        if (agentDoc.id) {
+          agentNameMap.set(agentDoc.id, agentDoc.name ?? '');
+        }
+      }
+    }
+
+    const conversationMap = new Map<string, MessageScopeMetadata>();
+    for (const conversation of conversationDocs) {
+      if (!conversation.conversationId) {
+        continue;
+      }
+      const agentId = conversation.agent_id;
+      conversationMap.set(conversation.conversationId, {
+        agentId,
+        agentScope: normalizeAgentScope((agentId && agentNameMap.get(agentId)) || undefined),
+      });
+    }
+    return conversationMap;
+  };
+
+  const applyMessageScopeMetadata = (
+    doc: Record<string, unknown>,
+    object: Record<string, unknown>,
+    conversationScopeMap: Map<string, MessageScopeMetadata>,
+  ) => {
+    if (!isMessageIndex) {
+      return;
+    }
+
+    const conversationId = typeof doc.conversationId === 'string' ? doc.conversationId : undefined;
+    if (!conversationId) {
+      return;
+    }
+
+    const metadata = conversationScopeMap.get(conversationId);
+    const sender = typeof doc.sender === 'string' ? doc.sender : undefined;
+    const senderScope = isUserSender(sender) ? undefined : normalizeAgentScope(sender);
+
+    if (metadata?.agentId && typeof object.agent_id !== 'string') {
+      object.agent_id = metadata.agentId;
+    }
+
+    const scope = senderScope ?? metadata?.agentScope;
+    if (scope) {
+      object.agent_scope = scope;
+    }
+  };
 
   class MeiliMongooseModel {
     /**
@@ -254,6 +373,20 @@ const createMeiliMongooseModel = ({
       const formattedDocs = documents.map((doc) =>
         _.omitBy(_.pick(doc, attributesToIndex), (_v, k) => k.startsWith('$')),
       );
+      const conversationIds = [
+        ...new Set(
+          documents
+            .map((doc) => doc.conversationId)
+            .filter(
+              (conversationId): conversationId is string =>
+                typeof conversationId === 'string' && conversationId.length > 0,
+            ),
+        ),
+      ];
+      const conversationScopeMap = await resolveConversationScopeMetadata(conversationIds);
+      formattedDocs.forEach((formattedDoc, indexPosition) => {
+        applyMessageScopeMetadata(documents[indexPosition], formattedDoc, conversationScopeMap);
+      });
 
       try {
         // Add documents to MeiliSearch
@@ -403,6 +536,13 @@ const createMeiliMongooseModel = ({
         delete object.content;
       }
 
+      if (isMessageIndex && typeof object.sender === 'string' && !isUserSender(object.sender)) {
+        const senderScope = normalizeAgentScope(object.sender);
+        if (senderScope) {
+          object.agent_scope = senderScope;
+        }
+      }
+
       return object;
     }
 
@@ -419,6 +559,10 @@ const createMeiliMongooseModel = ({
       }
 
       const object = this.preprocessObjectForIndex!();
+      if (isMessageIndex && typeof object.conversationId === 'string') {
+        const conversationScopeMap = await resolveConversationScopeMetadata([object.conversationId]);
+        applyMessageScopeMetadata(this.toJSON() as Record<string, unknown>, object, conversationScopeMap);
+      }
       const maxRetries = 3;
       let retryCount = 0;
 
@@ -460,6 +604,16 @@ const createMeiliMongooseModel = ({
     ): Promise<void> {
       try {
         const object = this.preprocessObjectForIndex!();
+        if (isMessageIndex && typeof object.conversationId === 'string') {
+          const conversationScopeMap = await resolveConversationScopeMetadata([
+            object.conversationId,
+          ]);
+          applyMessageScopeMetadata(
+            this.toJSON() as Record<string, unknown>,
+            object,
+            conversationScopeMap,
+          );
+        }
         await index.updateDocuments([object], { primaryKey });
         next();
       } catch (error) {
@@ -578,6 +732,10 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
   };
 
   const client = new MeiliSearch({ host, apiKey });
+  const requiredFilterableAttributesByIndex: Record<string, string[]> = {
+    messages: ['user', 'sender', 'conversationId', 'agent_scope', 'agent_id'],
+  };
+  const requiredFilterableAttributes = requiredFilterableAttributesByIndex[indexName] ?? ['user'];
 
   /** Create index only if it doesn't exist */
   const index = client.index<MeiliIndexable>(indexName);
@@ -620,10 +778,25 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
     }
 
     try {
-      await index.updateSettings({
-        filterableAttributes: ['user'],
-      });
-      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' filterable`);
+      const existingSettings = await index.getSettings();
+      const existingFilterableAttributes = Array.isArray(existingSettings.filterableAttributes)
+        ? existingSettings.filterableAttributes
+        : [];
+      const mergedFilterableAttributes = [...existingFilterableAttributes];
+      for (const attribute of requiredFilterableAttributes) {
+        if (!mergedFilterableAttributes.includes(attribute)) {
+          mergedFilterableAttributes.push(attribute);
+        }
+      }
+
+      if (mergedFilterableAttributes.length !== existingFilterableAttributes.length) {
+        await index.updateSettings({
+          filterableAttributes: mergedFilterableAttributes,
+        });
+        logger.debug(
+          `[mongoMeili] Updated index ${indexName} settings to include required filterable attributes: ${requiredFilterableAttributes.join(', ')}`,
+        );
+      }
     } catch (settingsError) {
       logger.error(`[mongoMeili] Error updating index settings for ${indexName}:`, settingsError);
     }
@@ -644,7 +817,9 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
     logger.debug(`[mongoMeili] Added 'user' field to ${indexName} index attributes`);
   }
 
-  schema.loadClass(createMeiliMongooseModel({ index, attributesToIndex, primaryKey, syncOptions }));
+  schema.loadClass(
+    createMeiliMongooseModel({ mongoose, index, attributesToIndex, primaryKey, syncOptions }),
+  );
 
   // Register Mongoose hooks
   schema.post('save', function (doc: DocumentWithMeiliIndex, next) {

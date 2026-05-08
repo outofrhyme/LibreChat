@@ -446,6 +446,37 @@ describe('getOpenAILLMConfig', () => {
       expect(result.llmConfig.modelKwargs).toHaveProperty('max_output_tokens', 8192);
       expect(result.llmConfig).not.toHaveProperty('maxTokens');
     });
+
+    it('should convert maxTokens to max_completion_tokens for bare chat-latest', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'chat-latest',
+          max_tokens: 4096,
+        },
+      });
+
+      expect(result.llmConfig.modelKwargs).toHaveProperty('max_completion_tokens', 4096);
+      expect(result.llmConfig).not.toHaveProperty('maxTokens');
+    });
+
+    it('should convert maxTokens to max_output_tokens for bare chat-latest with Responses API', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'chat-latest',
+          max_tokens: 4096,
+        },
+        addParams: {
+          useResponsesApi: true,
+        },
+      });
+
+      expect(result.llmConfig.modelKwargs).toHaveProperty('max_output_tokens', 4096);
+      expect(result.llmConfig).not.toHaveProperty('maxTokens');
+    });
   });
 
   describe('Reasoning Parameters', () => {

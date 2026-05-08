@@ -13,6 +13,7 @@ const { disposeClient, clientRegistry, requestDataMap } = require('~/server/clea
 const { handleAbortError } = require('~/server/middleware');
 const { logViolation } = require('~/cache');
 const { saveMessage } = require('~/models');
+const { getCleanOriginalText, prependMessageTimestamp } = require('./messageTimestamp');
 
 function createCloseHandler(abortController) {
   return function (manual) {
@@ -38,7 +39,7 @@ function createCloseHandler(abortController) {
  */
 const ResumableAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -47,9 +48,12 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     parentMessageId = null,
     overrideParentMessageId = null,
     responseMessageId: editedResponseMessageId = null,
+    clientTimezone = null,
   } = req.body;
 
   const userId = req.user.id;
+  const cleanOriginalText = getCleanOriginalText(originalText);
+  const text = prependMessageTimestamp(cleanOriginalText, clientTimezone);
 
   const { allowed, pendingRequests, limit } = await checkAndIncrementPendingRequest(userId);
   if (!allowed) {
@@ -360,7 +364,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
         if (shouldGenerateTitle) {
           addTitle(req, {
-            text,
+            text: cleanOriginalText,
             response: { ...response },
             client,
           })
@@ -440,7 +444,7 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
  */
 const _LegacyAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -449,6 +453,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     parentMessageId = null,
     overrideParentMessageId = null,
     responseMessageId: editedResponseMessageId = null,
+    clientTimezone = null,
   } = req.body;
 
   // Generate conversationId upfront if not provided - streamId === conversationId always
@@ -466,6 +471,8 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
   // Match the same logic used for conversationId generation above
   const isNewConvo = !reqConversationId || reqConversationId === 'new';
   const userId = req.user.id;
+  const cleanOriginalText = getCleanOriginalText(originalText);
+  const text = prependMessageTimestamp(cleanOriginalText, clientTimezone);
 
   // Create handler to avoid capturing the entire parent scope
   let getReqData = (data = {}) => {
@@ -720,7 +727,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     // Add title if needed - extract minimal data
     if (addTitle && parentMessageId === Constants.NO_PARENT && isNewConvo) {
       addTitle(req, {
-        text,
+        text: cleanOriginalText,
         response: { ...response },
         client,
       })

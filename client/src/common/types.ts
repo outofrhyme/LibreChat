@@ -369,6 +369,7 @@ export type TMessageChatContext = {
   ask: (...args: Parameters<TAskFunction>) => void;
   index: number;
   regenerate: (message: t.TMessage, options?: { addedConvo?: t.TConversation | null }) => void;
+  setLatestMessage: SetterOrUpdater<t.TMessage | null>;
   conversation: t.TConversation | null;
   latestMessageId: string | undefined;
   latestMessageDepth: number | undefined;

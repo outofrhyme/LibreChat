@@ -765,6 +765,15 @@ export function updateMessageContent(payload: t.TUpdateMessageContent): Promise<
   return request.put(endpoints.messages({ conversationId, messageId }), { text, index });
 }
 
+export function deleteMessage(payload: t.TDeleteMessageRequest): Promise<void> {
+  const { conversationId, messageId } = payload;
+  if (!conversationId) {
+    throw new Error('conversationId is required');
+  }
+
+  return request.delete(endpoints.messages({ conversationId, messageId }));
+}
+
 export const editArtifact = async ({
   messageId,
   ...params

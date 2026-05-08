@@ -51,6 +51,14 @@ const messageSchema: Schema<IMessage> = new Schema(
       type: String,
       meiliIndex: true,
     },
+    agent_id: {
+      type: String,
+      meiliIndex: true,
+    },
+    agent_scope: {
+      type: String,
+      meiliIndex: true,
+    },
     text: {
       type: String,
       meiliIndex: true,

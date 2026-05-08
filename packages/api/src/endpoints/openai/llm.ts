@@ -344,7 +344,7 @@ export function getOpenAILLMConfig({
 
   if (
     llmConfig.model &&
-    /\bgpt-[5-9](?:\.\d+)?\b/i.test(llmConfig.model) &&
+    (llmConfig.model === 'chat-latest' || /\bgpt-[5-9](?:\.\d+)?\b/i.test(llmConfig.model)) &&
     llmConfig.maxTokens != null
   ) {
     const paramName =

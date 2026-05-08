@@ -113,6 +113,7 @@ export type TPayload = Partial<TMessage> &
     isTemporary: boolean;
     ephemeralAgent?: TEphemeralAgent | null;
     editedContent?: TEditedContent | null;
+    clientTimezone?: string;
     /** Added conversation for multi-convo feature */
     addedConvo?: TConversation;
   };
@@ -231,6 +232,11 @@ export type TUpdateMessageContent = {
   messageId: string;
   index: number;
   text: string;
+};
+
+export type TDeleteMessageRequest = {
+  conversationId: string;
+  messageId: string;
 };
 
 export type TUpdateUserKeyRequest = {

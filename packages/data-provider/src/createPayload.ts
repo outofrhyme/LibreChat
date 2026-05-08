@@ -38,6 +38,7 @@ export default function createPayload(submission: t.TSubmission) {
     isRegenerate,
     editedContent,
     conversationId,
+    clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     isContinued: !!(isEdited && isContinued),
     ephemeralAgent: s.isAssistantsEndpoint(endpoint) ? undefined : ephemeralAgent,
   };

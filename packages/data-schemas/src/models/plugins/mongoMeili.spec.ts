@@ -392,6 +392,79 @@ describe('Meilisearch Mongoose plugin', () => {
       });
     });
 
+    test('message processSyncBatch falls back when Conversation model is not registered', async () => {
+      const previousConversationModel = mongoose.models.Conversation;
+      if (previousConversationModel) {
+        mongoose.deleteModel('Conversation');
+      }
+
+      try {
+        const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+        const messageId = 'missing-conversation-model-message';
+        mockAddDocumentsInBatches.mockClear();
+
+        await expect(
+          messageModel.processSyncBatch(mockIndex(), [
+            {
+              _id: new mongoose.Types.ObjectId(),
+              messageId,
+              conversationId: 'conversation-without-registered-model',
+              user: new mongoose.Types.ObjectId(),
+              isCreatedByUser: false,
+              sender: 'Assistant Agent',
+              expiredAt: null,
+            },
+          ]),
+        ).resolves.toBeUndefined();
+
+        expect(mockAddDocumentsInBatches).toHaveBeenCalledWith(
+          [expect.objectContaining({ messageId, agent_scope: 'Assistant Agent' })],
+          undefined,
+          { primaryKey: 'messageId' },
+        );
+      } finally {
+        createConversationModel(mongoose);
+      }
+    });
+
+    test('message processSyncBatch falls back when Agent model is not registered', async () => {
+      const conversationModel = createConversationModel(mongoose);
+      const messageModel = createMessageModel(mongoose) as SchemaWithMeiliMethods;
+      const conversationId = 'conversation-without-registered-agent-model';
+      const messageId = 'missing-agent-model-message';
+
+      await conversationModel.deleteMany({ conversationId });
+      await conversationModel.collection.insertOne({
+        conversationId,
+        user: new mongoose.Types.ObjectId(),
+        title: 'Agent fallback',
+        endpoint: EModelEndpoint.agents,
+        agent_id: 'agent-without-model',
+        expiredAt: null,
+      });
+      mockAddDocumentsInBatches.mockClear();
+
+      await expect(
+        messageModel.processSyncBatch(mockIndex(), [
+          {
+            _id: new mongoose.Types.ObjectId(),
+            messageId,
+            conversationId,
+            user: new mongoose.Types.ObjectId(),
+            isCreatedByUser: true,
+            sender: 'User',
+            expiredAt: null,
+          },
+        ]),
+      ).resolves.toBeUndefined();
+
+      const indexedMessage = mockAddDocumentsInBatches.mock.calls[0][0][0];
+      expect(indexedMessage).toEqual(
+        expect.objectContaining({ messageId, agent_id: 'agent-without-model' }),
+      );
+      expect(indexedMessage).not.toHaveProperty('agent_scope');
+    });
+
     test('addObjectToMeili retries on failure', async () => {
       const conversationModel = createConversationModel(mongoose) as SchemaWithMeiliMethods;
 

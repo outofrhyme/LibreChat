@@ -107,6 +107,7 @@ const ContentRender = memo(function ContentRender({
     messageLabel,
     handleContinue,
     handleFeedback,
+    deleteMessage,
     latestMessageId,
     copyToClipboard,
     regenerateMessage,
@@ -241,6 +242,7 @@ const ContentRender = memo(function ContentRender({
                 isSubmitting={chatContext.isSubmitting}
                 conversation={conversation ?? null}
                 regenerate={handleRegenerateMessage}
+                deleteMessage={deleteMessage}
                 copyToClipboard={copyToClipboard}
                 handleContinue={handleContinue}
                 latestMessageId={latestMessageId}

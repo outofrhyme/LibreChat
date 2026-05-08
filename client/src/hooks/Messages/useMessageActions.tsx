@@ -13,6 +13,7 @@ import {
 import type { TMessageProps } from '~/common';
 import type { TMessageChatContext } from '~/common/types';
 import { useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
+import { useDeleteMessageMutation } from '~/data-provider';
 import useCopyToClipboard from './useCopyToClipboard';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetAddedConvo } from '~/hooks/Chat';
@@ -47,6 +48,7 @@ export default function useMessageActions(props: TMessageActions) {
     latestMessageId,
     latestMessageDepth,
     handleContinue,
+    setLatestMessage,
     // NOTE: isSubmitting is intentionally NOT destructured here.
     // chatContext.isSubmitting is a getter backed by a ref — destructuring
     // would capture a one-time snapshot. Always access via chatContext.isSubmitting.
@@ -122,6 +124,35 @@ export default function useMessageActions(props: TMessageActions) {
   }, [chatContext, isCreatedByUser, message, regenerate, getAddedConvo]);
 
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
+  const deleteMessageMutation = useDeleteMessageMutation({
+    onSuccess: (_data, vars, context) => {
+      if (!context || latestMessageId !== vars.messageId) {
+        return;
+      }
+      setLatestMessage(context.fallbackMessage);
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previousMessages == null) {
+        return;
+      }
+      const previousMessage =
+        context.previousMessages.find(
+          (message) => message.messageId === context.deletedMessageId,
+        ) ?? null;
+      setLatestMessage(previousMessage);
+    },
+  });
+
+  const deleteMessage = useCallback(() => {
+    if (!conversation?.conversationId || !messageId) {
+      return;
+    }
+
+    deleteMessageMutation.mutate({
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+  }, [conversation?.conversationId, deleteMessageMutation, messageId]);
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
@@ -179,6 +210,7 @@ export default function useMessageActions(props: TMessageActions) {
     messageLabel,
     handleFeedback,
     handleContinue,
+    deleteMessage,
     copyToClipboard,
     latestMessageId,
     regenerateMessage,

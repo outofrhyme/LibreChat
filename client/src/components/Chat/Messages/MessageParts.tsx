@@ -3,7 +3,14 @@ import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
-import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
+import {
+  useMessageHelpers,
+  useLocalize,
+  useAttachments,
+  useContentMetadata,
+  useMessageActions,
+} from '~/hooks';
+import { useMessagesViewContext } from '~/Providers';
 import { cn, getHeaderPrefixForScreenReader, getMessageAriaLabel } from '~/utils';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import ContentParts from './Content/ContentParts';
@@ -23,6 +30,7 @@ export default function Message(props: TMessageProps) {
     attachments: message?.attachments,
   });
   const {
+    ask,
     edit,
     index,
     agent,
@@ -41,6 +49,40 @@ export default function Message(props: TMessageProps) {
   const fontSize = useAtomValue(fontSizeAtom);
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const { children, messageId = null, isCreatedByUser } = message ?? {};
+  const { latestMessageDepth, setLatestMessage, regenerate } = useMessagesViewContext();
+  const chatContext = useMemo(
+    () => ({
+      ask,
+      index,
+      regenerate,
+      setLatestMessage,
+      conversation,
+      latestMessageId,
+      latestMessageDepth,
+      handleContinue,
+      get isSubmitting() {
+        return isSubmitting;
+      },
+    }),
+    [
+      ask,
+      index,
+      regenerate,
+      setLatestMessage,
+      conversation,
+      latestMessageId,
+      latestMessageDepth,
+      handleContinue,
+      isSubmitting,
+    ],
+  );
+  const { deleteMessage } = useMessageActions({
+    message,
+    searchResults,
+    currentEditId,
+    setCurrentEditId,
+    chatContext,
+  });
 
   const name = useMemo(() => {
     let result = '';
@@ -166,6 +208,7 @@ export default function Message(props: TMessageProps) {
                       isSubmitting={isSubmitting}
                       conversation={conversation ?? null}
                       regenerate={() => regenerateMessage()}
+                      deleteMessage={deleteMessage}
                       copyToClipboard={copyToClipboard}
                       handleContinue={handleContinue}
                       latestMessageId={latestMessageId}

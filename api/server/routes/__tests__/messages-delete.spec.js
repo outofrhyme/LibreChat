@@ -142,7 +142,7 @@ describe('deleteMessages – model-level IDOR prevention', () => {
 
 describe('DELETE /:conversationId/:messageId – route handler', () => {
   let app;
-  const { deleteMessages } = require('~/models');
+  const { deleteMessages, getMessages } = require('~/models');
 
   const authenticatedUserId = 'user-owner-123';
 
@@ -163,6 +163,9 @@ describe('DELETE /:conversationId/:messageId – route handler', () => {
   });
 
   it('should pass user and conversationId in the deleteMessages filter', async () => {
+    getMessages
+      .mockResolvedValueOnce([{ messageId: 'msg-1' }])
+      .mockResolvedValueOnce([]);
     deleteMessages.mockResolvedValue({ deletedCount: 1 });
 
     await request(app).delete('/api/messages/convo-1/msg-1');
@@ -176,6 +179,9 @@ describe('DELETE /:conversationId/:messageId – route handler', () => {
   });
 
   it('should return 204 on successful deletion', async () => {
+    getMessages
+      .mockResolvedValueOnce([{ messageId: 'msg-owned' }])
+      .mockResolvedValueOnce([]);
     deleteMessages.mockResolvedValue({ deletedCount: 1 });
 
     const response = await request(app).delete('/api/messages/convo-1/msg-owned');
@@ -188,7 +194,30 @@ describe('DELETE /:conversationId/:messageId – route handler', () => {
     });
   });
 
+  it('should return 404 when the message does not exist for the user', async () => {
+    getMessages.mockResolvedValueOnce([]);
+
+    const response = await request(app).delete('/api/messages/convo-1/missing-msg');
+
+    expect(response.status).toBe(404);
+    expect(deleteMessages).not.toHaveBeenCalled();
+  });
+
+  it('should return 409 when the message has children', async () => {
+    getMessages
+      .mockResolvedValueOnce([{ messageId: 'parent-msg' }])
+      .mockResolvedValueOnce([{ messageId: 'child-msg' }]);
+
+    const response = await request(app).delete('/api/messages/convo-1/parent-msg');
+
+    expect(response.status).toBe(409);
+    expect(deleteMessages).not.toHaveBeenCalled();
+  });
+
   it('should return 500 when deleteMessages throws', async () => {
+    getMessages
+      .mockResolvedValueOnce([{ messageId: 'msg-1' }])
+      .mockResolvedValueOnce([]);
     deleteMessages.mockRejectedValue(new Error('DB failure'));
 
     const response = await request(app).delete('/api/messages/convo-1/msg-1');
