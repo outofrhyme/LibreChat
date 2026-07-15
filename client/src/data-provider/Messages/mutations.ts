@@ -103,19 +103,10 @@ type DeleteMessageContext = {
   remainingMessages: t.TMessage[];
   deletedMessageId: string;
   fallbackMessage: t.TMessage | null;
-  previousLatestMessage?: t.TMessage | null;
 };
 
-type DeleteMessageSnapshot = Pick<DeleteMessageContext, 'previousLatestMessage'>;
-
 export const useDeleteMessageMutation = (
-  _options?: t.MutationOptions<
-    void,
-    t.TDeleteMessageRequest,
-    DeleteMessageContext,
-    Error,
-    DeleteMessageSnapshot
-  >,
+  _options?: t.MutationOptions<void, t.TDeleteMessageRequest, DeleteMessageContext, Error>,
 ): UseMutationResult<void, Error, t.TDeleteMessageRequest, DeleteMessageContext> => {
   const queryClient = useQueryClient();
   const { onSuccess, onError, onMutate: userOnMutate, ...options } = _options ?? {};
