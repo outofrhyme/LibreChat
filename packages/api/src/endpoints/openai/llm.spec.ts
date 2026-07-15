@@ -55,6 +55,22 @@ describe('getOpenAILLMConfig', () => {
       expect(result.llmConfig).toHaveProperty('maxTokens', 4096);
       expect(result.llmConfig).not.toHaveProperty('max_tokens');
     });
+
+    it('should keep prompt_cache_key addParams as a top-level recognized OpenAI parameter', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'gpt-4',
+        },
+        addParams: {
+          prompt_cache_key: 'instance-cache-key',
+        },
+      });
+
+      expect(result.llmConfig).toHaveProperty('prompt_cache_key', 'instance-cache-key');
+      expect(result.llmConfig).not.toHaveProperty('modelKwargs');
+    });
   });
 
   describe('Empty String Handling (Issue Fix)', () => {

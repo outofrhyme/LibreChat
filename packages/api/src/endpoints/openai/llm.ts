@@ -64,6 +64,7 @@ export const knownOpenAIParams: Set<string> = new Set([
   'truncation',
   'include',
   'previous_response_id',
+  'prompt_cache_key',
   // LangChain specific
   '__includeRawResponse',
   'maxConcurrency',

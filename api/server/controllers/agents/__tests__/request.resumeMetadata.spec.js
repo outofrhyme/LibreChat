@@ -1,4 +1,5 @@
 const { EventEmitter } = require('events');
+const { Constants } = require('librechat-data-provider');
 
 const mockLogger = {
   debug: jest.fn(),
@@ -11,6 +12,8 @@ const mockGenerationJobManager = {
   createJob: jest.fn(),
   emitError: jest.fn(),
   completeJob: jest.fn(),
+  getJob: jest.fn(),
+  emitDone: jest.fn(),
   getResumeState: jest.fn(),
   updateMetadata: jest.fn(),
 };
@@ -169,6 +172,43 @@ function nextTick() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+describe('message timestamp helpers', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('builds localized message timestamps with 24-hour h23 formatting', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-15T04:30:05.000Z'));
+
+    expect(AgentController._test.buildMessageTimestamp('America/New_York')).toBe(
+      '[msg_time: 2026-07-15 00:30:05 America/New_York]',
+    );
+  });
+
+  it('falls back to a server-local timestamp for invalid timezones', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-15T04:30:05.000Z'));
+
+    expect(AgentController._test.buildMessageTimestamp('Not/AZone')).toMatch(
+      /^\[msg_time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [^\]]+\]$/,
+    );
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      '[AgentController] Invalid timezone provided, using server local timezone',
+      { timezone: 'Not/AZone' },
+    );
+  });
+
+  it('strips an existing leading timestamp before prepending a fresh one', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-15T04:30:05.000Z'));
+
+    expect(
+      AgentController._test.buildTimestampedUserText(
+        '[msg_time: 2025-01-02 03:04:05 America/Los_Angeles]\nEdited text',
+        'America/New_York',
+      ),
+    ).toBe('[msg_time: 2026-07-15 00:30:05 America/New_York]\nEdited text');
+  });
+});
+
 describe('ResumableAgentController resume metadata', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -183,6 +223,8 @@ describe('ResumableAgentController resume metadata', () => {
       abortController: new AbortController(),
       emitter: { on: jest.fn() },
     });
+    mockGenerationJobManager.getJob.mockResolvedValue({ createdAt: 1000 });
+    mockGenerationJobManager.emitDone.mockResolvedValue(undefined);
     mockGenerationJobManager.getResumeState.mockResolvedValue(null);
     mockGenerationJobManager.updateMetadata.mockResolvedValue(undefined);
     mockGenerationJobManager.emitError.mockResolvedValue(undefined);
@@ -309,13 +351,89 @@ describe('ResumableAgentController resume metadata', () => {
           messageId: 'follow-up-user',
           parentMessageId: 'original-response',
           conversationId,
-          text: 'Check Google Workspace availability.',
+          text: expect.stringMatching(
+            /^\[msg_time: [^\]]+\]\nCheck Google Workspace availability\.$/,
+          ),
         },
       }),
     );
     expect(mockGenerationJobManager.updateMetadata.mock.invocationCallOrder[0]).toBeLessThan(
       initializeClient.mock.invocationCallOrder[0],
     );
+  });
+
+  it('sends timestamped text while title generation receives original text', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-15T04:30:05.000Z'));
+    const conversationId = 'new';
+    const sendMessage = jest.fn(async (sentText, options) => {
+      const userMessage = {
+        messageId: 'user-message',
+        parentMessageId: Constants.NO_PARENT,
+        conversationId: 'generated-conversation',
+        text: sentText,
+      };
+      options.onStart(userMessage, 'response-message', true);
+      return {
+        messageId: 'response-message',
+        parentMessageId: 'user-message',
+        text: 'Response text',
+        databasePromise: Promise.resolve({
+          conversation: {
+            conversationId: 'generated-conversation',
+            title: null,
+          },
+        }),
+      };
+    });
+    const initializeClient = jest.fn().mockResolvedValue({
+      client: {
+        sendMessage,
+        options: {},
+        savedMessageIds: new Set(),
+        skipSaveUserMessage: false,
+      },
+    });
+    const addTitle = jest.fn().mockResolvedValue(undefined);
+    const req = {
+      user: { id: 'user-123' },
+      body: {
+        text: '[msg_time: 2025-01-02 03:04:05 America/Los_Angeles]\nEdited prompt',
+        timezone: 'America/New_York',
+        messageId: 'user-message',
+        parentMessageId: Constants.NO_PARENT,
+        conversationId,
+        endpointOption: {
+          endpoint: 'agents',
+          modelOptions: { model: 'gpt-4.1' },
+        },
+      },
+      config: {},
+    };
+    const res = createResumableResponse();
+
+    await AgentController(req, res, jest.fn(), initializeClient, addTitle);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      '[msg_time: 2026-07-15 00:30:05 America/New_York]\nEdited prompt',
+      expect.any(Object),
+    );
+    expect(req.body.text).toBe('[msg_time: 2026-07-15 00:30:05 America/New_York]\nEdited prompt');
+    expect(addTitle).toHaveBeenCalledWith(
+      req,
+      expect.objectContaining({
+        text: '[msg_time: 2025-01-02 03:04:05 America/Los_Angeles]\nEdited prompt',
+      }),
+    );
+    expect(mockSaveMessage).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        text: '[msg_time: 2026-07-15 00:30:05 America/New_York]\nEdited prompt',
+      }),
+      expect.any(Object),
+    );
+    jest.useRealTimers();
   });
 
   it('keeps request-scoped MCP connections until resumable initialization finishes', async () => {

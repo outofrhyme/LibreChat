@@ -250,6 +250,7 @@ const ContentRender = memo(function ContentRender({
                 conversation={conversation ?? null}
                 regenerate={handleRegenerateMessage}
                 copyToClipboard={copyToClipboard}
+                deleteMessage={deleteMessage}
                 handleContinue={handleContinue}
                 latestMessageId={latestMessageId}
                 handleFeedback={handleFeedback}

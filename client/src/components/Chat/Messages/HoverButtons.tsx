@@ -1,6 +1,13 @@
 import React, { useState, useMemo, memo } from 'react';
 import { useRecoilState } from 'recoil';
-import { EditIcon, Clipboard, CheckMark, ContinueIcon, RegenerateIcon } from '@librechat/client';
+import {
+  EditIcon,
+  Clipboard,
+  TrashIcon,
+  CheckMark,
+  ContinueIcon,
+  RegenerateIcon,
+} from '@librechat/client';
 import type { TConversation, TMessage, TFeedback } from 'librechat-data-provider';
 import { useGenerationsByLatest, useLocalize } from '~/hooks';
 import { Fork } from '~/components/Conversations';
@@ -17,6 +24,7 @@ type THoverButtons = {
   isSubmitting: boolean;
   message: TMessage;
   regenerate: () => void;
+  deleteMessage: () => void;
   handleContinue: (e: React.MouseEvent<HTMLButtonElement>) => void;
   latestMessageId?: string;
   isLast: boolean;
@@ -122,6 +130,7 @@ const HoverButtons = ({
   isSubmitting,
   message,
   regenerate,
+  deleteMessage,
   handleContinue,
   latestMessageId,
   isLast,
@@ -163,6 +172,7 @@ const HoverButtons = ({
   }
 
   const { isCreatedByUser, error } = message;
+  const isLeafMessage = (message.children?.length ?? 0) === 0;
 
   if (error === true) {
     return (
@@ -188,6 +198,7 @@ const HoverButtons = ({
   };
 
   const handleCopy = () => copyToClipboard(setIsCopied);
+  const handleDelete = () => deleteMessage();
 
   return (
     <div className="group visible flex justify-center gap-0.5 self-end focus-within:outline-none lg:justify-start">
@@ -255,6 +266,16 @@ const HoverButtons = ({
       {/* Feedback Buttons */}
       {!isCreatedByUser && handleFeedback != null && (
         <Feedback handleFeedback={handleFeedback} feedback={message.feedback} isLast={isLast} />
+      )}
+
+      {isLeafMessage && (
+        <HoverButton
+          onClick={handleDelete}
+          title={localize('com_ui_delete')}
+          icon={<TrashIcon className="h-[18px] w-[18px]" />}
+          isLast={isLast}
+          className="active"
+        />
       )}
 
       {/* Regenerate Button */}

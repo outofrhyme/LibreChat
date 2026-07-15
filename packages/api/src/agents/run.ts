@@ -359,6 +359,38 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function getOpenAIPromptCacheKey(): string | undefined {
+  const key = process.env.OPENAI_PROMPT_CACHE_KEY?.trim();
+  return key ? key : undefined;
+}
+
+function isNativeOpenAIAgent(agent: RunAgent, provider: unknown): boolean {
+  if (provider !== Providers.OPENAI) {
+    return false;
+  }
+  if (agent.endpoint == null) {
+    return true;
+  }
+  return agent.endpoint === EModelEndpoint.openAI || agent.endpoint === Providers.OPENAI;
+}
+
+function applyOpenAIPromptCacheKey(
+  agent: RunAgent,
+  provider: unknown,
+  llmConfig: t.RunLLMConfig,
+): void {
+  if (!isNativeOpenAIAgent(agent, provider)) {
+    return;
+  }
+
+  const promptCacheKey = getOpenAIPromptCacheKey();
+  if (!promptCacheKey) {
+    return;
+  }
+
+  (llmConfig as Record<string, unknown>).prompt_cache_key = promptCacheKey;
+}
+
 const nullableAgentModelParameterKeys = [
   'temperature',
   'maxContextTokens',
@@ -973,6 +1005,8 @@ export async function createRun({
       },
       modelParameters,
     ) as t.RunLLMConfig;
+
+    applyOpenAIPromptCacheKey(agent, provider, llmConfig);
 
     const joinInstructionMap = (map?: Record<string, unknown>) =>
       Object.values(map ?? {})

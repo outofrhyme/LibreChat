@@ -40,6 +40,72 @@ function createCloseHandler(abortController) {
   };
 }
 
+const padTimestampPart = (value) => value.toString().padStart(2, '0');
+
+function formatLocalTimestamp(date) {
+  const dateParts = [
+    date.getFullYear(),
+    padTimestampPart(date.getMonth() + 1),
+    padTimestampPart(date.getDate()),
+  ];
+  return (
+    dateParts.join('-') +
+    ` ${[
+      padTimestampPart(date.getHours()),
+      padTimestampPart(date.getMinutes()),
+      padTimestampPart(date.getSeconds()),
+    ].join(':')}`
+  );
+}
+
+const LEADING_MSG_TIME_PREFIX_REGEX = /^\[msg_time:\s[^\]]+\](?:\r?\n|\s)?/;
+
+function stripLeadingMsgTimePrefix(text) {
+  return text.replace(LEADING_MSG_TIME_PREFIX_REGEX, '');
+}
+
+function getTimestampParts(date, timezone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  return new Map(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+}
+
+function buildMessageTimestamp(timezone) {
+  const now = new Date();
+  if (typeof timezone === 'string' && timezone.trim() !== '') {
+    const normalizedTimezone = timezone.trim();
+    try {
+      const parts = getTimestampParts(now, normalizedTimezone);
+      const stamp = `${parts.get('year')}-${parts.get('month')}-${parts.get('day')} ${parts.get(
+        'hour',
+      )}:${parts.get('minute')}:${parts.get('second')}`;
+      return `[msg_time: ${stamp} ${normalizedTimezone}]`;
+    } catch (_error) {
+      logger.debug('[AgentController] Invalid timezone provided, using server local timezone', {
+        timezone: normalizedTimezone,
+      });
+    }
+  }
+
+  const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'server-local';
+  return `[msg_time: ${formatLocalTimestamp(now)} ${serverTimezone}]`;
+}
+
+function buildTimestampedUserText(originalText, timezone) {
+  const timestampPrefix = buildMessageTimestamp(timezone);
+  const safeOriginalText = typeof originalText === 'string' ? originalText : '';
+  const sanitizedOriginalText = stripLeadingMsgTimePrefix(safeOriginalText);
+  return sanitizedOriginalText ? `${timestampPrefix}\n${sanitizedOriginalText}` : timestampPrefix;
+}
+
 function toValidISOString(value) {
   if (value == null) {
     return null;
@@ -174,7 +240,7 @@ function rejectPreliminaryParentMessageId(res) {
  */
 const ResumableAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -210,6 +276,9 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     await logViolation(req, res, ViolationTypes.CONCURRENT, violationInfo, violationInfo.score);
     return res.status(429).json(violationInfo);
   }
+
+  const text = buildTimestampedUserText(originalText, req.body?.timezone);
+  req.body.text = text;
 
   // Generate conversationId upfront if not provided - streamId === conversationId always
   // Treat "new" as a placeholder that needs a real UUID (frontend may send "new" for new convos)
@@ -488,7 +557,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
         if (titleEligible && titleTiming === 'immediate') {
           immediateTitlePromise = addTitle(req, {
-            text,
+            text: originalText,
             conversationId,
             client,
             immediate: true,
@@ -664,7 +733,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           }
         } else if (shouldGenerateTitle) {
           addTitle(req, {
-            text,
+            text: originalText,
             response: { ...response },
             client,
           })
@@ -761,7 +830,7 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
  */
 const _LegacyAgentController = async (req, res, next, initializeClient, addTitle) => {
   const {
-    text,
+    text: originalText,
     isRegenerate,
     endpointOption,
     conversationId: reqConversationId,
@@ -771,6 +840,9 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     overrideParentMessageId = null,
     responseMessageId: editedResponseMessageId = null,
   } = req.body;
+
+  const text = buildTimestampedUserText(originalText, req.body?.timezone);
+  req.body.text = text;
 
   // Generate conversationId upfront if not provided - streamId === conversationId always
   // Treat "new" as a placeholder that needs a real UUID (frontend may send "new" for new convos)
@@ -1054,7 +1126,7 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
     // Add title if needed - extract minimal data
     if (addTitle && parentMessageId === Constants.NO_PARENT && isNewConvo) {
       addTitle(req, {
-        text,
+        text: originalText,
         response: { ...response },
         client,
       })
@@ -1087,6 +1159,12 @@ const _LegacyAgentController = async (req, res, next, initializeClient, addTitle
         performCleanup();
       });
   }
+};
+
+AgentController._test = {
+  buildMessageTimestamp,
+  buildTimestampedUserText,
+  stripLeadingMsgTimePrefix,
 };
 
 module.exports = AgentController;

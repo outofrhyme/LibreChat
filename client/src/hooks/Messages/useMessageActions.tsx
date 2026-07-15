@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useUpdateFeedbackMutation } from 'librechat-data-provider/react-query';
 import {
   TFeedback,
@@ -13,6 +13,7 @@ import {
 import type { TMessageProps } from '~/common';
 import type { TMessageChatContext } from '~/common/types';
 import { useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
+import { useDeleteMessageMutation } from '~/data-provider';
 import useCopyToClipboard from './useCopyToClipboard';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetAddedConvo } from '~/hooks/Chat';
@@ -122,6 +123,34 @@ export default function useMessageActions(props: TMessageActions) {
   }, [chatContext, isCreatedByUser, message, regenerate, getAddedConvo]);
 
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
+  const latestMessage = useRecoilValue(store.latestMessageFamily(index));
+  const setLatestMessage = useSetRecoilState(store.latestMessageFamily(index));
+  const deleteMessageMutation = useDeleteMessageMutation({
+    onMutate: () => ({ previousLatestMessage: latestMessage }),
+    onSuccess: (_data, vars, context) => {
+      if (!context || latestMessageId !== vars.messageId) {
+        return;
+      }
+      setLatestMessage(context.fallbackMessage);
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previousLatestMessage === undefined) {
+        return;
+      }
+      setLatestMessage(context.previousLatestMessage);
+    },
+  });
+
+  const deleteMessage = useCallback(() => {
+    if (!conversation?.conversationId || !messageId) {
+      return;
+    }
+
+    deleteMessageMutation.mutate({
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+  }, [conversation?.conversationId, deleteMessageMutation, messageId]);
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
@@ -179,6 +208,7 @@ export default function useMessageActions(props: TMessageActions) {
     messageLabel,
     handleFeedback,
     handleContinue,
+    deleteMessage,
     copyToClipboard,
     latestMessageId,
     regenerateMessage,
