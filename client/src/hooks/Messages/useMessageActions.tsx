@@ -17,7 +17,6 @@ import { useDeleteMessageMutation } from '~/data-provider';
 import useCopyToClipboard from './useCopyToClipboard';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetAddedConvo } from '~/hooks/Chat';
-import { useLatestMessage } from './useLatestMessage';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -124,10 +123,7 @@ export default function useMessageActions(props: TMessageActions) {
   }, [chatContext, isCreatedByUser, message, regenerate, getAddedConvo]);
 
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
-  const latestMessage = useLatestMessage(index);
-  const deleteMessageMutation = useDeleteMessageMutation({
-    onMutate: () => ({ previousLatestMessage: latestMessage }),
-  });
+  const deleteMessageMutation = useDeleteMessageMutation();
 
   const deleteMessage = useCallback(() => {
     if (!conversation?.conversationId || !messageId) {
