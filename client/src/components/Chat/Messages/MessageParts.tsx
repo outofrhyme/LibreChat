@@ -36,6 +36,7 @@ export default function Message(props: TMessageProps) {
     latestMessageId,
     handleContinue,
     copyToClipboard,
+    deleteMessage,
     regenerateMessage,
   } = useMessageHelpers(props);
 
@@ -175,6 +176,7 @@ export default function Message(props: TMessageProps) {
                       conversation={conversation ?? null}
                       regenerate={() => regenerateMessage()}
                       copyToClipboard={copyToClipboard}
+                      deleteMessage={deleteMessage}
                       handleContinue={handleContinue}
                       latestMessageId={latestMessageId}
                       isLast={isLast}

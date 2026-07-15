@@ -98,6 +98,106 @@ export const useEditArtifact = (
   return useMutation(mutationOptions);
 };
 
+type DeleteMessageContext = {
+  previousMessages: t.TMessage[] | undefined;
+  remainingMessages: t.TMessage[];
+  deletedMessageId: string;
+  fallbackMessage: t.TMessage | null;
+  previousLatestMessage?: t.TMessage | null;
+};
+
+type DeleteMessageSnapshot = Pick<DeleteMessageContext, 'previousLatestMessage'>;
+
+export const useDeleteMessageMutation = (
+  _options?: t.MutationOptions<
+    void,
+    t.TDeleteMessageRequest,
+    DeleteMessageContext,
+    Error,
+    DeleteMessageSnapshot
+  >,
+): UseMutationResult<void, Error, t.TDeleteMessageRequest, DeleteMessageContext> => {
+  const queryClient = useQueryClient();
+  const { onSuccess, onError, onMutate: userOnMutate, ...options } = _options ?? {};
+
+  const mutationOptions: UseMutationOptions<
+    void,
+    Error,
+    t.TDeleteMessageRequest,
+    DeleteMessageContext
+  > = {
+    mutationFn: (variables: t.TDeleteMessageRequest) => dataService.deleteMessage(variables),
+    onMutate: async (vars) => {
+      const userContext = await userOnMutate?.(vars);
+      await queryClient.cancelQueries([QueryKeys.messages, vars.conversationId]);
+
+      const previousMessages = queryClient.getQueryData<t.TMessage[]>([
+        QueryKeys.messages,
+        vars.conversationId,
+      ]);
+
+      if (!previousMessages || previousMessages.length === 0) {
+        return {
+          ...userContext,
+          previousMessages,
+          remainingMessages: [],
+          deletedMessageId: vars.messageId,
+          fallbackMessage: null,
+        };
+      }
+
+      let deletedIndex = -1;
+      let deletedMessage: t.TMessage | undefined;
+      const remainingMessages = previousMessages.filter((message, index) => {
+        const isDeletedMessage = message.messageId === vars.messageId;
+        if (isDeletedMessage) {
+          deletedIndex = index;
+          deletedMessage = message;
+        }
+        return !isDeletedMessage;
+      });
+
+      const parentMessage = deletedMessage?.parentMessageId
+        ? remainingMessages.find((message) => message.messageId === deletedMessage?.parentMessageId)
+        : null;
+      const fallbackMessage =
+        parentMessage ??
+        (deletedIndex > 0 ? (remainingMessages[deletedIndex - 1] ?? null) : null) ??
+        remainingMessages[0] ??
+        null;
+
+      queryClient.setQueryData<t.TMessage[]>(
+        [QueryKeys.messages, vars.conversationId],
+        remainingMessages,
+      );
+
+      return {
+        ...userContext,
+        previousMessages,
+        remainingMessages,
+        deletedMessageId: vars.messageId,
+        fallbackMessage,
+      };
+    },
+    onError: (error, vars, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData<t.TMessage[]>(
+          [QueryKeys.messages, vars.conversationId],
+          context.previousMessages,
+        );
+      }
+      onError?.(error, vars, context);
+    },
+    onSuccess: (data, vars, context) => {
+      queryClient.invalidateQueries([QueryKeys.messages, vars.conversationId]);
+      onSuccess?.(data, vars, context);
+    },
+    ...options,
+  };
+
+  return useMutation(mutationOptions);
+};
+
 type BranchMessageContext = {
   previousMessages: t.TMessage[] | undefined;
   conversationId: string | null;
