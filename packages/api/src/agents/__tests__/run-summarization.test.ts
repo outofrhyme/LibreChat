@@ -1,3 +1,4 @@
+import { Providers } from '@librechat/agents';
 import { logger } from '@librechat/data-schemas';
 import {
   EModelEndpoint,
@@ -203,6 +204,108 @@ function makeAppConfig(customEndpoints: TestCustomEndpoint[]): AppConfig {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  delete process.env.OPENAI_PROMPT_CACHE_KEY;
+});
+
+// ---------------------------------------------------------------------------
+// Suite: native OpenAI prompt cache key
+// ---------------------------------------------------------------------------
+describe('native OpenAI prompt cache key', () => {
+  it('adds OPENAI_PROMPT_CACHE_KEY to native OpenAI chat-completions agent inputs', async () => {
+    process.env.OPENAI_PROMPT_CACHE_KEY = 'instance-cache-key';
+
+    const agents = await callAndCapture({
+      agents: [makeAgent({ model_parameters: { model: 'gpt-4o', useResponsesApi: false } })],
+    });
+
+    expect(agents[0].clientOptions).toMatchObject({
+      provider: Providers.OPENAI,
+      useResponsesApi: false,
+      prompt_cache_key: 'instance-cache-key',
+    });
+  });
+
+  it('omits prompt_cache_key for native OpenAI when OPENAI_PROMPT_CACHE_KEY is absent or blank', async () => {
+    let agents = await callAndCapture({
+      agents: [makeAgent({ model_parameters: { model: 'gpt-4o' } })],
+    });
+
+    expect(agents[0].clientOptions).not.toHaveProperty('prompt_cache_key');
+
+    jest.clearAllMocks();
+    process.env.OPENAI_PROMPT_CACHE_KEY = '   ';
+
+    agents = await callAndCapture({
+      agents: [makeAgent({ model_parameters: { model: 'gpt-4o' } })],
+    });
+
+    expect(agents[0].clientOptions).not.toHaveProperty('prompt_cache_key');
+  });
+
+  it('omits prompt_cache_key for non-OpenAI providers and custom OpenAI-compatible endpoints', async () => {
+    process.env.OPENAI_PROMPT_CACHE_KEY = 'instance-cache-key';
+
+    const agents = await callAndCapture({
+      agents: [
+        makeAgent({
+          id: 'anthropic_agent',
+          provider: Providers.ANTHROPIC,
+          endpoint: Providers.ANTHROPIC,
+          model: 'claude-sonnet-4-5',
+          model_parameters: { model: 'claude-sonnet-4-5' },
+        }),
+        makeAgent({
+          id: 'custom_openai_agent',
+          provider: Providers.OPENAI,
+          endpoint: 'LiteLLM',
+          model_parameters: { model: 'gpt-4o' },
+        }),
+      ],
+    });
+
+    expect(agents[0].clientOptions).not.toHaveProperty('prompt_cache_key');
+    expect(agents[1].clientOptions).not.toHaveProperty('prompt_cache_key');
+  });
+
+  it('adds OPENAI_PROMPT_CACHE_KEY to native OpenAI Responses API agent inputs', async () => {
+    process.env.OPENAI_PROMPT_CACHE_KEY = 'instance-cache-key';
+
+    const agents = await callAndCapture({
+      agents: [makeAgent({ model_parameters: { model: 'gpt-4o', useResponsesApi: true } })],
+    });
+
+    expect(agents[0].clientOptions).toMatchObject({
+      provider: Providers.OPENAI,
+      useResponsesApi: true,
+      prompt_cache_key: 'instance-cache-key',
+    });
+  });
+
+  it('adds OPENAI_PROMPT_CACHE_KEY to native OpenAI subagent inputs through the shared path', async () => {
+    process.env.OPENAI_PROMPT_CACHE_KEY = 'instance-cache-key';
+    const subagent = makeAgent({ id: 'agent_child', name: 'Child' });
+
+    const agents = await callAndCapture({
+      agents: [
+        makeAgent({
+          id: 'agent_parent',
+          name: 'Parent',
+          subagents: { enabled: true, allowSelf: false, agent_ids: ['agent_child'] },
+          subagentAgentConfigs: [subagent],
+        }),
+      ],
+    });
+
+    const subagentConfigs = agents[0].subagentConfigs as Array<Record<string, unknown>>;
+    const childInputs = subagentConfigs[0].agentInputs as Record<string, unknown>;
+
+    expect(agents[0].clientOptions).toMatchObject({
+      prompt_cache_key: 'instance-cache-key',
+    });
+    expect(childInputs.clientOptions).toMatchObject({
+      prompt_cache_key: 'instance-cache-key',
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -3,8 +3,10 @@ import throttle from 'lodash/throttle';
 import { isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
 import { useMessagesViewContext, useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
+import { useDeleteMessageMutation } from '~/data-provider';
 import useCopyToClipboard from './useCopyToClipboard';
 import { useGetAddedConvo } from '~/hooks/Chat';
+import { useLatestMessage } from './useLatestMessage';
 import { logger } from '~/utils';
 
 export default function useMessageHelpers(props: TMessageProps) {
@@ -82,6 +84,21 @@ export default function useMessageHelpers(props: TMessageProps) {
   };
 
   const copyToClipboard = useCopyToClipboard({ text, content });
+  const latestMessage = useLatestMessage(index);
+  const deleteMessageMutation = useDeleteMessageMutation({
+    onMutate: () => ({ previousLatestMessage: latestMessage }),
+  });
+
+  const deleteMessage = useCallback(() => {
+    if (!conversation?.conversationId || !messageId) {
+      return;
+    }
+
+    deleteMessageMutation.mutate({
+      conversationId: conversation.conversationId,
+      messageId,
+    });
+  }, [conversation?.conversationId, deleteMessageMutation, messageId]);
 
   return {
     ask,
@@ -96,6 +113,7 @@ export default function useMessageHelpers(props: TMessageProps) {
     handleScroll,
     handleContinue,
     latestMessageId,
+    deleteMessage,
     copyToClipboard,
     regenerateMessage,
   };
