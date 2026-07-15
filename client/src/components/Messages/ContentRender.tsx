@@ -114,6 +114,7 @@ const ContentRender = memo(function ContentRender({
     handleFeedback,
     latestMessageId,
     copyToClipboard,
+    deleteMessage,
     regenerateMessage,
     latestMessageDepth,
   } = useMessageActions({
