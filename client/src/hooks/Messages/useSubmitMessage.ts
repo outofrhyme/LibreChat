@@ -51,10 +51,6 @@ export default function useSubmitMessage() {
       if (!resolvedLatestMessage) {
         resolvedLatestMessage = rootMessages[rootMessages.length - 1] ?? null;
       }
-      if (!isLatestInRootMessages) {
-        setLatestMessage(resolvedLatestMessage);
-      }
-
       const submitted = ask(
         {
           text: data.text,
@@ -69,16 +65,7 @@ export default function useSubmitMessage() {
       }
       methods.reset();
     },
-    [
-      ask,
-      methods,
-      addedConvo,
-      getMessages,
-      latestMessage,
-      rootSiblingKey,
-      buildMessageTree,
-      setLatestMessage,
-    ],
+    [ask, methods, addedConvo, getMessages, latestMessage, rootSiblingKey, buildMessageTree],
   );
 
   const submitPrompt = useCallback(
