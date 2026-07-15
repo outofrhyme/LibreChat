@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import throttle from 'lodash/throttle';
 import { isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
@@ -8,6 +9,7 @@ import useCopyToClipboard from './useCopyToClipboard';
 import { useGetAddedConvo } from '~/hooks/Chat';
 import { useLatestMessage } from './useLatestMessage';
 import { logger } from '~/utils';
+import store from '~/store';
 
 export default function useMessageHelpers(props: TMessageProps) {
   const { message, currentEditId, setCurrentEditId } = props;

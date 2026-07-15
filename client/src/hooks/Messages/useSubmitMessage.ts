@@ -20,6 +20,7 @@ export default function useSubmitMessage() {
 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
   const setActivePrompt = useSetRecoilState(store.activePromptByIndex(index));
+  const setLatestMessage = useSetRecoilState(store.latestMessageFamily(index));
 
   const submitMessage = useCallback(
     async (data?: { text: string }) => {
